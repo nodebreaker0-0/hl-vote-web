@@ -22,8 +22,14 @@ module.exports = {
   ignorePatterns: ['out/**', 'out-mainnet/**', '.next/**', 'node_modules/**', 'coverage/**'],
   overrides: [
     {
-      // submit.ts is the only legitimate fetch caller
-      files: ['lib/signing/submit.ts', 'lib/signing/submit.test.ts'],
+      // submit.ts (POST /exchange) and api.ts (POST /info) are the only legitimate
+      // fetch callers; both hit the HF allow-listed origins.
+      files: [
+        'lib/signing/submit.ts',
+        'lib/signing/submit.test.ts',
+        'lib/api.ts',
+        'lib/api.test.ts',
+      ],
       rules: { 'no-restricted-globals': 'off' },
     },
   ],

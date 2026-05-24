@@ -94,4 +94,5 @@ hl-vote-web/
 | 2026-05-24 | T030~T040 Tier 0 UI + hotfix 4종 (hydration / paste 친절 / CSP unsafe-inline / chainId 1337 phantom) | ✅ |
 | 2026-05-24 | testnet outcome 1건 실 vote 성공 | ✅ |
 | 2026-05-24 | Constitution v1.1.0 — VII 제거, V cap ≤10, single wallet path (MetaMask + Ledger import) | ✅ |
-| 2026-05-25+ | testnet delisting 1건 → Tier 0 exit → mainnet 빌드 첫 실 vote | ⏳ |
+| 2026-05-24 | **mainnet 실 vote 1건 성공** — CHARTER §7 게이트 builnad confirm 통과 | ✅ |
+| 2026-05-25+ | Tier 2 polish (history viewer, friendly summary, release engineering, HF 공유) | ⏳ |

@@ -12,17 +12,41 @@ export const MNEMONIC_RE = /\b([a-z]{3,8}\s+){11,23}[a-z]{3,8}\b/;
 
 export type ActionVariant = 'outcome' | 'delisting' | 'unknown';
 
+/** Per-step result of the input pipeline. UI renders each as ✅ / ❌ / —.
+ *  null = the step was not reached because an earlier step failed. */
+export interface ValidationChecks {
+  notEmpty: boolean | null;
+  noCredentials: boolean | null;
+  validJson: boolean | null;
+  topLevelObject: boolean | null;
+  typeIsValidatorL1Vote: boolean | null;
+  variantKnown: boolean | null; // false ⇒ unknown variant (still signable)
+}
+
+function freshChecks(): ValidationChecks {
+  return {
+    notEmpty: null,
+    noCredentials: null,
+    validJson: null,
+    topLevelObject: null,
+    typeIsValidatorL1Vote: null,
+    variantKnown: null,
+  };
+}
+
 export interface ParseSuccess {
   ok: true;
   action: ValidatorL1VoteAction;
   variant: ActionVariant;
   innerKey: string | null; // the non-"type" key present (`O`, `D`, ...)
+  checks: ValidationChecks;
 }
 export interface ParseFailure {
   ok: false;
   error: string;
   /** True if the failure was a credential-shaped pattern. UI should clear input. */
   credentialDetected?: boolean;
+  checks: ValidationChecks;
 }
 export type ParseResult = ParseSuccess | ParseFailure;
 
@@ -82,62 +106,80 @@ function extractJsonSlice(text: string): string {
 }
 
 export function parseAction(raw: string): ParseResult {
+  const checks = freshChecks();
   const text = raw.trim();
-  if (text.length === 0) return { ok: false, error: 'Empty input.' };
 
-  // 1. Refuse outright if anything that looks like a private key / mnemonic.
+  // 1. notEmpty
+  checks.notEmpty = text.length > 0;
+  if (!checks.notEmpty) return { ok: false, error: 'Empty input.', checks };
+
+  // 2. noCredentials
   if (PRIVATE_KEY_RE.test(text)) {
+    checks.noCredentials = false;
     return {
       ok: false,
       credentialDetected: true,
       error:
         'Input contains what looks like a private key (0x + 64 hex). Refusing to parse. Clear this field immediately.',
+      checks,
     };
   }
   if (MNEMONIC_RE.test(text)) {
+    checks.noCredentials = false;
     return {
       ok: false,
       credentialDetected: true,
       error:
         'Input contains what looks like a BIP-39 mnemonic. Refusing to parse. Clear this field immediately.',
+      checks,
     };
   }
+  checks.noCredentials = true;
 
-  // 2. JSON parse. Strip common wrappers (`action = {...}`, trailing `;`, etc.)
-  // first so a verbatim Python-script paste works. The extracted slice must
-  // still be the original byte-for-byte JSON object — we only locate, never
-  // reformat.
+  // 3. validJson — Strip common wrappers first (Python-script paste etc).
+  // Extraction does NOT reformat; the resulting slice is byte-for-byte JSON.
   const sliced = extractJsonSlice(text);
   let parsed: unknown;
   try {
     parsed = JSON.parse(sliced);
+    checks.validJson = true;
   } catch (e) {
-    return { ok: false, error: `Invalid JSON: ${(e as Error).message}` };
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { ok: false, error: 'Top-level must be a JSON object.' };
+    checks.validJson = false;
+    return { ok: false, error: `Invalid JSON: ${(e as Error).message}`, checks };
   }
 
-  // 3. type check.
+  // 4. topLevelObject
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    checks.topLevelObject = false;
+    return { ok: false, error: 'Top-level must be a JSON object.', checks };
+  }
+  checks.topLevelObject = true;
+
+  // 5. typeIsValidatorL1Vote
   const obj = parsed as Record<string, unknown>;
   if (obj['type'] !== 'validatorL1Vote') {
+    checks.typeIsValidatorL1Vote = false;
     return {
       ok: false,
       error: `Top-level "type" must be "validatorL1Vote" (got ${JSON.stringify(obj['type'])}).`,
+      checks,
     };
   }
+  checks.typeIsValidatorL1Vote = true;
 
-  // 4. Variant classification by the first non-"type" key.
+  // 6. variantKnown — classification by the first non-"type" key.
   const innerKey = Object.keys(obj).find((k) => k !== 'type') ?? null;
   let variant: ActionVariant;
   if (innerKey === 'O') variant = 'outcome';
   else if (innerKey === 'D') variant = 'delisting';
   else variant = 'unknown';
+  checks.variantKnown = variant !== 'unknown';
 
   return {
     ok: true,
     action: obj as ValidatorL1VoteAction,
     variant,
     innerKey,
+    checks,
   };
 }

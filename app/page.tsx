@@ -5,11 +5,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { NetworkSelector } from '@/components/NetworkSelector';
-import { ActionPasteBox } from '@/components/ActionPasteBox';
+import { ActionInput } from '@/components/ActionInput';
 import { ActionPreview } from '@/components/ActionPreview';
 import { WalletSelector, type WalletState } from '@/components/WalletSelector';
 import { ResponseViewer } from '@/components/ResponseViewer';
 import { DedupModal } from '@/components/DedupModal';
+import { VoteStatus } from '@/components/VoteStatus';
 import {
   actionHash,
   l1Payload,
@@ -30,6 +31,7 @@ import {
   type HistoryEntry,
 } from '@/lib/history';
 import type { ParseResult } from '@/lib/parseAction';
+import type { InputMode } from '@/components/InputModeSelector';
 import { BUILD_TIME } from '@/lib/env';
 
 type ResponseState =
@@ -45,6 +47,10 @@ export default function HomePage() {
   const [resp, setResp] = useState<ResponseState>({ kind: 'idle' });
   const [dedupOverride, setDedupOverride] = useState<string | null>(null);
   const [pendingDedup, setPendingDedup] = useState<HistoryEntry | null>(null);
+
+  // When the user clicks "Vote on this" in VoteStatus we push the raw JSON
+  // into ActionInput's custom mode via a remount-keyed prop.
+  const [pinned, setPinned] = useState<{ mode: InputMode; raw: string; key: number } | null>(null);
 
   const action: ValidatorL1VoteAction | null = parsed?.ok ? parsed.action : null;
 
@@ -138,6 +144,25 @@ export default function HomePage() {
     void doSubmit(action, network, wallet);
   }, [pendingDedup, action, network, wallet, doSubmit]);
 
+  // "Vote on this" → switch to custom mode + push raw JSON.
+  const onPickAction = useCallback((raw: string) => {
+    setPinned({ mode: 'custom', raw, key: Date.now() });
+    // Push the raw JSON straight into ActionInput's child by remount + initial value.
+    // We do it via the remount key; ActionInput will read the raw on mount in custom mode.
+    // The simpler implementation: render ActionInput with a controlled initial textarea value.
+    // To keep ActionPasteBox simple we just rely on the user to ⌘V again,
+    // but to make the click meaningful we also pre-fill via the textarea below.
+    requestAnimationFrame(() => {
+      const ta = document.querySelector<HTMLTextAreaElement>('textarea');
+      if (!ta) return;
+      // Use the native setter so React's onChange listener fires.
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+      setter?.set?.call(ta, raw);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, []);
+
   return (
     <main className="space-y-5">
       <header className="border-b border-hl-border pb-4">
@@ -157,7 +182,7 @@ export default function HomePage() {
 
       <NetworkSelector value={network} onChange={setNetwork} />
 
-      <ActionPasteBox onResult={setParsed} />
+      <ActionInput onResult={setParsed} pinned={pinned ?? undefined} />
 
       {action && network && <ActionPreview action={action} network={network} />}
 
@@ -184,6 +209,12 @@ export default function HomePage() {
       </div>
 
       <ResponseViewer state={resp} />
+
+      <VoteStatus
+        network={network}
+        selfSigner={wallet?.account ?? null}
+        onPickAction={onPickAction}
+      />
 
       {pendingDedup && (
         <DedupModal

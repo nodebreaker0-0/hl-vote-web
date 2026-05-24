@@ -20,7 +20,9 @@ export function ActionPasteBox({ onResult }: ActionPasteBoxProps) {
     (next: string) => {
       setRaw(next);
       if (next.trim().length === 0) {
-        setResult(null);
+        const r = parseAction('');
+        setResult(r);
+        onResult(r, next);
         return;
       }
       const r = parseAction(next);
@@ -35,23 +37,15 @@ export function ActionPasteBox({ onResult }: ActionPasteBoxProps) {
   );
 
   const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => run(e.target.value);
-  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    // Allow default paste; the change handler picks it up.
-    void e;
-  };
 
   return (
-    <fieldset className="rounded-md border border-hl-border bg-hl-surface p-4">
-      <legend className="px-2 text-xs uppercase tracking-wider text-hl-subtle">
-        Action JSON
-      </legend>
+    <div>
       <textarea
         value={raw}
         onChange={onChange}
-        onPaste={onPaste}
         spellCheck={false}
         autoComplete="off"
-        rows={10}
+        rows={8}
         placeholder={
           'Paste the validatorL1Vote action exactly as posted by validator-publisher in Slack.\n\n' +
           'Example (delisting): {"type":"validatorL1Vote","D":"<id>"}\n' +
@@ -62,13 +56,13 @@ export function ActionPasteBox({ onResult }: ActionPasteBoxProps) {
           'placeholder:text-hl-subtle/60 focus:outline-none focus:ring-2',
           result?.ok
             ? 'ring-1 ring-hl-mint-dim focus:ring-hl-mint'
-            : result && !result.ok
+            : result && !result.ok && raw.trim().length > 0
               ? 'ring-2 ring-mainnet focus:ring-mainnet'
               : 'ring-1 ring-hl-border focus:ring-hl-mint',
         )}
       />
 
-      {result && !result.ok && (
+      {result && !result.ok && raw.trim().length > 0 && (
         <div
           className={clsx(
             'mt-3 rounded p-3 text-sm',
@@ -86,23 +80,6 @@ export function ActionPasteBox({ onResult }: ActionPasteBoxProps) {
           <p>{result.error}</p>
         </div>
       )}
-
-      {result?.ok && result.variant === 'unknown' && (
-        <div className="mt-3 rounded bg-testnet/10 p-3 text-sm text-testnet" role="status">
-          Unknown validatorL1Vote variant (inner key:{' '}
-          <code className="font-mono">{result.innerKey}</code>). Proceed only if validator-publisher
-          surfaced this exact JSON.
-        </div>
-      )}
-
-      {result?.ok && result.variant !== 'unknown' && (
-        <p className="mt-3 text-xs text-hl-subtle">
-          variant:{' '}
-          <span className="text-hl-text">
-            {result.variant} (inner key <code className="font-mono">{result.innerKey}</code>)
-          </span>
-        </p>
-      )}
-    </fieldset>
+    </div>
   );
 }
