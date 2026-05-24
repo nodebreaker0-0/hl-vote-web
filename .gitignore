@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+out-mainnet/
+coverage/
+*.log
+.DS_Store
+.env
+.env.local
+.vscode/
+.idea/
+tests/golden/fixtures.json
+dist/
+*.tsbuildinfo
+.venv/
+__pycache__/
+*.pyc
