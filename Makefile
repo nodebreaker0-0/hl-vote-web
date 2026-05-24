@@ -71,13 +71,18 @@ constitution-gate:
 	@if [ -s /tmp/_il2_bad ]; then echo "  JSON.stringify in unexpected lib/signing file(s):"; cat /tmp/_il2_bad; exit 1; fi
 	@echo "  ok"
 	@echo "== III. mainnet build flag respected =="
-	@if [ "$$NEXT_PUBLIC_MAINNET_ENABLED" != "true" ]; then \
-		if [ -d out ]; then \
-			! grep -rnE "api\\.hyperliquid\\.xyz" out/ 2>/dev/null || (echo "  testnet build contains mainnet URL"; exit 1); \
-		fi; \
-		echo "  ok (testnet build — mainnet URL absent in out/)"; \
-	else \
+	@if [ "$$NEXT_PUBLIC_MAINNET_ENABLED" = "true" ]; then \
 		echo "  mainnet build — skipping URL grep"; \
+	elif [ ! -d out ]; then \
+		echo "  (skipped — out/ not built)"; \
+	else \
+		hits=$$(grep -rE "api\\.hyperliquid\\.xyz" out/ 2>/dev/null | grep -vE "api\\.hyperliquid-testnet\\.xyz" | wc -l | tr -d ' '); \
+		if [ "$$hits" != "0" ]; then \
+			echo "  testnet build contains mainnet URL ($$hits hit(s)):"; \
+			grep -rE "api\\.hyperliquid\\.xyz" out/ 2>/dev/null | grep -vE "api\\.hyperliquid-testnet\\.xyz" | head -3; \
+			exit 1; \
+		fi; \
+		echo "  ok (testnet build — no mainnet URL in out/)"; \
 	fi
 	@echo "== IV.  no 32B hex private key literal =="
 	@# Synthetic hex digests in *.test.ts / tests/ / fixtures are allowed (action_hash, etc).
