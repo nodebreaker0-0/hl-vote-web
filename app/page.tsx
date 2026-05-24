@@ -4,6 +4,7 @@
 // Single wallet path: MetaMask (with optional Ledger-import account inside it).
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { NetworkSelector } from '@/components/NetworkSelector';
 import { ActionInput } from '@/components/ActionInput';
 import { ActionPreview } from '@/components/ActionPreview';
@@ -83,9 +84,9 @@ export default function HomePage() {
           setResp({
             kind: 'error',
             error:
-              `${e.message}\n\nHL signing forces chainId=1337 (phantom). Your MetaMask must ` +
-              `be on this chain before signing. If auto-add failed, add it manually: ` +
-              `Networks → Add → chainId 1337, any RPC, currency PHA.`,
+              `${e.message}\n\nHL signing forces chainId=1337. Your MetaMask must be on this ` +
+              `chain before signing. If auto-add failed, add it manually: ` +
+              `Networks → Add → chainId 1337, name "EIP712signer", any RPC, currency TMP.`,
           });
           return;
         }
@@ -224,8 +225,11 @@ export default function HomePage() {
         />
       )}
 
-      <footer className="border-t border-hl-border pt-3 text-[10px] text-hl-subtle">
-        build {BUILD_TIME} &middot; static SPA &middot; no analytics &middot; no backend
+      <footer className="flex items-baseline justify-between border-t border-hl-border pt-3 text-[10px] text-hl-subtle">
+        <span>build {BUILD_TIME} &middot; static SPA &middot; no analytics &middot; no backend</span>
+        <Link href="/history" className="hover:text-hl-mint">
+          history →
+        </Link>
       </footer>
     </main>
   );

@@ -1,0 +1,95 @@
+# Tag-driven release: `git tag v0.1.0 && git push origin v0.1.0`
+# Produces hl-vote-web-<version>.zip + SHA-256 in the Release notes.
+# Operators verify the SHA-256 before deploying.
+
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # required to upload Release assets
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install node deps
+        run: npm ci --ignore-scripts
+
+      - name: install python deps (golden fixtures)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet --upgrade pip
+          .venv/bin/pip install --quiet msgpack eth-account eth-utils hyperliquid-python-sdk
+
+      - name: generate golden fixtures
+        run: .venv/bin/python scripts/gen_golden_fixtures.py
+
+      - name: testnet build
+        run: make verify
+      - name: archive testnet
+        id: pkg_testnet
+        run: |
+          V=${GITHUB_REF#refs/tags/}
+          Z=hl-vote-web-${V}-testnet.zip
+          (cd out && zip -r ../${Z} .)
+          S=$(shasum -a 256 ${Z} | awk '{print $1}')
+          echo "zip=${Z}" >> $GITHUB_OUTPUT
+          echo "sha256=${S}" >> $GITHUB_OUTPUT
+
+      - name: mainnet build
+        env:
+          NEXT_PUBLIC_MAINNET_ENABLED: 'true'
+        run: |
+          rm -rf out .next
+          make verify
+      - name: archive mainnet
+        id: pkg_mainnet
+        env:
+          NEXT_PUBLIC_MAINNET_ENABLED: 'true'
+        run: |
+          V=${GITHUB_REF#refs/tags/}
+          Z=hl-vote-web-${V}-mainnet.zip
+          (cd out && zip -r ../${Z} .)
+          S=$(shasum -a 256 ${Z} | awk '{print $1}')
+          echo "zip=${Z}" >> $GITHUB_OUTPUT
+          echo "sha256=${S}" >> $GITHUB_OUTPUT
+
+      - name: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.pkg_testnet.outputs.zip }}
+            ${{ steps.pkg_mainnet.outputs.zip }}
+          generate_release_notes: true
+          body: |
+            ## Artifacts
+
+            | Build | SHA-256 |
+            |---|---|
+            | testnet (`${{ steps.pkg_testnet.outputs.zip }}`) | `${{ steps.pkg_testnet.outputs.sha256 }}` |
+            | mainnet (`${{ steps.pkg_mainnet.outputs.zip }}`) | `${{ steps.pkg_mainnet.outputs.sha256 }}` |
+
+            ### Verify before deploying
+
+            ```bash
+            shasum -a 256 hl-vote-web-*-testnet.zip
+            shasum -a 256 hl-vote-web-*-mainnet.zip
+            ```
+
+            Both values MUST match the table above byte-for-byte. If they do not, do not deploy — the artifact has been tampered with.
+
+            ### Deploy
+
+            See `README.md` → Deploy section. The fastest path is `aws s3 sync out/ s3://<bucket>/ --acl public-read`.

@@ -49,13 +49,16 @@ export async function connectMetaMask(): Promise<`0x${string}`> {
 
 // Hyperliquid L1 actions embed a phantom domain with chainId 1337. MetaMask v11+
 // enforces that typed-data domain.chainId equals the wallet's active chainId,
-// so we must add/switch to a phantom 1337 chain in the wallet before signing.
-// Trade-off: this leaves a "Hyperliquid L1 Signer (phantom)" entry in the user's
-// network list. The chain has no real RPC; it is signer-only.
+// so we must add/switch to a 1337 chain in the wallet before signing.
+//
+// The chain entry left in the user's MetaMask network list is deliberately
+// generic — "EIP712signer" with currency "TMP" — so that the wallet entry
+// reads as a tool the operator uses, not as a real Hyperliquid network they
+// might mistake for trading. The chain has no real RPC and is signer-only.
 const HL_PHANTOM_CHAIN = {
   chainId: '0x539', // 1337
-  chainName: 'Hyperliquid L1 Signer (phantom 1337)',
-  nativeCurrency: { name: 'Phantom', symbol: 'PHA', decimals: 18 },
+  chainName: 'EIP712signer',
+  nativeCurrency: { name: 'Temp', symbol: 'TMP', decimals: 18 },
   // MetaMask requires at least one rpcUrls entry. This URL never receives
   // JSON-RPC traffic from us; we only use this chain for typed-data signing.
   rpcUrls: ['https://api.hyperliquid-testnet.xyz'],
@@ -98,9 +101,9 @@ export async function ensureHLPhantomChain(): Promise<void> {
     const code = (e as { code?: number }).code;
     if (code === 4001) throw new WalletRejectedError('User rejected adding the phantom chain.');
     throw new WalletChainError(
-      `Failed to add Hyperliquid phantom chain (1337): ${(e as Error).message}. ` +
+      `Failed to add signer chain (1337): ${(e as Error).message}. ` +
         `Add it manually in MetaMask: Settings → Networks → Add manually. ` +
-        `chainId=1337, name="HL Signer", any RPC, currency PHA.`,
+        `chainId=1337, name="EIP712signer", any RPC, currency TMP.`,
     );
   }
 

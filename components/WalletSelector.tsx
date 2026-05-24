@@ -87,13 +87,17 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
       {err && <p className="mt-2 text-xs text-mainnet">{err}</p>}
 
       <p className="mt-3 border-t border-hl-border pt-3 text-[11px] leading-relaxed text-hl-subtle">
-        HL signing requires <code className="font-mono text-hl-text">chainId 1337</code> (phantom).
-        On first sign, MetaMask will prompt to add &amp; switch to this signer-only chain.
+        HL signing requires <code className="font-mono text-hl-text">chainId 1337</code>. On first
+        sign, MetaMask will prompt to add &amp; switch to a signer-only chain entry called{' '}
+        <code className="font-mono text-hl-text">EIP712signer</code> (currency{' '}
+        <code className="font-mono text-hl-text">TMP</code>) — approve. The chain never receives
+        RPC traffic; it exists only so MetaMask&apos;s chain-match check on EIP-712 typed-data
+        passes.
         <br />
         <strong className="text-hl-text">Testnet</strong>: hot v-key imported into MetaMask.{' '}
         <strong className="text-hl-text">Mainnet</strong>: use a MetaMask account that&apos;s an
-        imported Ledger (Connect hardware wallet → Ledger). The device will display the same
-        hashes you see in the Preview — compare them before approving on device.
+        imported Ledger (Connect hardware wallet → Ledger). The device displays the same hashes
+        you see in the Preview — compare them before approving on device.
       </p>
     </fieldset>
   );
