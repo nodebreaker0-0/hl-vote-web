@@ -91,5 +91,7 @@ hl-vote-web/
 | 2026-05-24 | T010~T016 lib/signing 포팅 (serialize / actionHash / phantomAgent / l1Payload / typedDataHashes / submit) | ✅ |
 | 2026-05-24 | T020~T021 Python SDK golden fixture **100/100 byte-exact** | ✅ |
 | 2026-05-24 | constitution-gate ✅ green (10 원칙 grep) | ✅ |
-| 2026-05-24 | `make verify` 풀 통과 + git push | ⏳ Mac local 에서 이어서 (HANDOFF.md 참조) |
-| 2026-05-25+ | T030~T040 Tier 0 UI | 대기 |
+| 2026-05-24 | T030~T040 Tier 0 UI + hotfix 4종 (hydration / paste 친절 / CSP unsafe-inline / chainId 1337 phantom) | ✅ |
+| 2026-05-24 | testnet outcome 1건 실 vote 성공 | ✅ |
+| 2026-05-24 | Constitution v1.1.0 — VII 제거, V cap ≤10, single wallet path (MetaMask + Ledger import) | ✅ |
+| 2026-05-25+ | testnet delisting 1건 → Tier 0 exit → mainnet 빌드 첫 실 vote | ⏳ |

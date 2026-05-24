@@ -26,6 +26,61 @@ export interface ParseFailure {
 }
 export type ParseResult = ParseSuccess | ParseFailure;
 
+/**
+ * Strip common copy-paste wrappers so the operator can paste straight from
+ * a Python script (`action = {...}`) or Slack code-block. The extracted slice
+ * MUST still be the verbatim JSON sub-string — we never reformat, only locate.
+ */
+function extractJsonSlice(text: string): string {
+  let t = text.trim();
+
+  // Drop a leading `<ident> =` or `<ident>:` assignment.
+  t = t.replace(/^(?:const|let|var)?\s*[A-Za-z_]\w*\s*[:=]\s*/, '');
+
+  // Drop a trailing semicolon or comma.
+  t = t.replace(/[;,]\s*$/, '');
+
+  // If text doesn't start with '{', look for the first balanced `{...}` block.
+  if (!t.startsWith('{')) {
+    const start = t.indexOf('{');
+    if (start < 0) return t; // let JSON.parse fail with a sane message
+    // Walk to the matching closing brace, ignoring braces inside strings.
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let end = -1;
+    for (let i = start; i < t.length; i++) {
+      // String.charAt always returns string (never undefined), so we avoid the
+      // `noUncheckedIndexedAccess` -> non-null-assertion dance.
+      const ch = t.charAt(i);
+      if (inStr) {
+        if (esc) {
+          esc = false;
+        } else if (ch === '\\') {
+          esc = true;
+        } else if (ch === '"') {
+          inStr = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inStr = true;
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end > 0) t = t.slice(start, end + 1);
+  }
+
+  return t;
+}
+
 export function parseAction(raw: string): ParseResult {
   const text = raw.trim();
   if (text.length === 0) return { ok: false, error: 'Empty input.' };
@@ -48,10 +103,14 @@ export function parseAction(raw: string): ParseResult {
     };
   }
 
-  // 2. JSON parse.
+  // 2. JSON parse. Strip common wrappers (`action = {...}`, trailing `;`, etc.)
+  // first so a verbatim Python-script paste works. The extracted slice must
+  // still be the original byte-for-byte JSON object — we only locate, never
+  // reformat.
+  const sliced = extractJsonSlice(text);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(sliced);
   } catch (e) {
     return { ok: false, error: `Invalid JSON: ${(e as Error).message}` };
   }

@@ -1,6 +1,15 @@
 'use client';
 
-// T032 — Tier 0 = MetaMask only. Ledger is added in Tier 1 (T050+).
+// T032 — MetaMask is the single wallet path.
+// MetaMask itself supports importing a Ledger hardware wallet as one of its
+// accounts (Connect hardware wallet → Ledger). When the user picks that
+// account, eth_signTypedData_v4 is transparently routed to the device and
+// the device displays the same domain/message hashes the SPA shows in the
+// preview panel — operator verifies them visually before approving on device.
+//
+// This collapses what used to be two code paths (MetaMask hot key for testnet,
+// direct WebHID for Ledger) into one. The ensureHLPhantomChain() helper in
+// lib/wallet/metamask.ts handles the chainId 1337 switch for both.
 
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
@@ -39,7 +48,8 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
       const account = await connectMetaMask();
       onChange({ kind: 'metamask', account });
     } catch (e) {
-      if (e instanceof WalletNotFoundError) setErr('MetaMask not detected. Install the extension.');
+      if (e instanceof WalletNotFoundError)
+        setErr('MetaMask not detected. Install the extension.');
       else if (e instanceof WalletRejectedError) setErr('Connect rejected.');
       else setErr((e as Error).message);
     }
@@ -49,33 +59,21 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
     <fieldset className="rounded-md border border-hl-border bg-hl-surface p-4">
       <legend className="px-2 text-xs uppercase tracking-wider text-hl-subtle">Wallet</legend>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={connect}
-          disabled={!mounted || !available || value?.kind === 'metamask'}
-          className={clsx(
-            'rounded px-4 py-2 text-sm font-medium transition-colors',
-            value?.kind === 'metamask'
-              ? 'bg-hl-mint/20 text-hl-mint ring-2 ring-hl-mint'
-              : available
-                ? 'bg-hl-bg text-hl-text hover:bg-hl-border'
-                : 'cursor-not-allowed bg-hl-bg text-hl-subtle opacity-40',
-          )}
-        >
-          {value?.kind === 'metamask' ? 'MetaMask connected' : 'Connect MetaMask'}
-        </button>
-
-        <button
-          type="button"
-          disabled
-          title="Ledger (WebHID) — Tier 1 (T050+)"
-          className="cursor-not-allowed rounded bg-hl-bg px-4 py-2 text-sm text-hl-subtle opacity-40"
-        >
-          Ledger
-          <span className="ml-2 text-[10px] uppercase tracking-wider">tier 1</span>
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={connect}
+        disabled={!mounted || !available || value?.kind === 'metamask'}
+        className={clsx(
+          'rounded px-4 py-2 text-sm font-medium transition-colors',
+          value?.kind === 'metamask'
+            ? 'bg-hl-mint/20 text-hl-mint ring-2 ring-hl-mint'
+            : available
+              ? 'bg-hl-bg text-hl-text hover:bg-hl-border'
+              : 'cursor-not-allowed bg-hl-bg text-hl-subtle opacity-40',
+        )}
+      >
+        {value?.kind === 'metamask' ? 'MetaMask connected' : 'Connect MetaMask'}
+      </button>
 
       {value && (
         <p className="mt-3 text-xs text-hl-subtle">
@@ -87,6 +85,16 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
         <p className="mt-2 text-xs text-mainnet">MetaMask extension not detected in this browser.</p>
       )}
       {err && <p className="mt-2 text-xs text-mainnet">{err}</p>}
+
+      <p className="mt-3 border-t border-hl-border pt-3 text-[11px] leading-relaxed text-hl-subtle">
+        HL signing requires <code className="font-mono text-hl-text">chainId 1337</code> (phantom).
+        On first sign, MetaMask will prompt to add &amp; switch to this signer-only chain.
+        <br />
+        <strong className="text-hl-text">Testnet</strong>: hot v-key imported into MetaMask.{' '}
+        <strong className="text-hl-text">Mainnet</strong>: use a MetaMask account that&apos;s an
+        imported Ledger (Connect hardware wallet → Ledger). The device will display the same
+        hashes you see in the Preview — compare them before approving on device.
+      </p>
     </fieldset>
   );
 }

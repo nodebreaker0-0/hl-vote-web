@@ -38,23 +38,23 @@
 
 ---
 
-### User Story 3 — Ledger Nano 로 서명 (P2)
+### User Story 3 — Ledger 동선 (MetaMask import) (P2)
 
-**시나리오**: builnad 는 Mac 에 Ledger Nano 를 USB 로 꽂아둔 상태. Ethereum 앱 열고 Blind signing 활성. 브라우저에서 "Ledger" 선택 → 디바이스 prompt → device 화면에서 domain hash / message hash 확인 → 양쪽 버튼 confirm. SPA 가 표시한 hash 와 device hash 가 다르면 사용자는 reject.
+**시나리오**: builnad 는 mainnet validator v-key 가 들어있는 Ledger Nano 를 Mac USB 에 꽂은 상태에서 MetaMask 의 "Connect hardware wallet → Ledger" 로 그 account 를 이미 import 해두었다. hl-vote-web 의 MetaMask 버튼으로 연결 → MetaMask UI 에서 active account 를 Ledger account 로 선택 → 평소처럼 Sign + Submit → MetaMask 가 typed-data 를 device 로 라우팅 → device 화면에 domain hash + message hash 표시 → 사용자가 SPA Preview 패널의 hash 와 직접 비교한 후 device 에서 confirm.
 
-**Why this priority**: 현재 동선의 진짜 대체는 Ledger 경로. Tier 1. MetaMask 만으로는 hot key 위험.
+**Why this priority**: 현재 동선의 진짜 대체는 Ledger 경로. MetaMask 가 hardware wallet 라우팅을 책임지므로 별도 WebHID 코드 불요 (Constitution §VII).
 
-**Independent Test**: 동일 testnet action 1건을 (a) Python `ledger_outcome_vote.py` 로 서명한 결과와 (b) hl-vote-web Ledger 경로로 서명한 결과의 `r/s/v` 가 일치 (동일 nonce 사용 시).
+**Independent Test**: 동일 testnet action 1건을 (a) Python `ledger_outcome_vote.py` 로 서명한 결과와 (b) hl-vote-web (MetaMask + 임포트된 Ledger) 로 서명한 결과의 `r/s/v` 가 일치 (동일 nonce 사용 시).
 
 **Acceptance Scenarios**:
-1. **Given** Ledger 가 unlock + Ethereum 앱 열림 + Blind signing on, **When** 사용자가 "Ledger" 선택, **Then** WebHID permission prompt → 연결 → derivation path 입력 (default `44'/60'/0'/0/0`) → 주소 표시.
-2. **Given** Ledger 연결됨, **When** "Sign + Submit", **Then** device 화면에 domain hash + message hash 가 표시되고, SPA UI 의 typed-confirm modal 이 동일 hash 두 개 확인을 요구.
-3. **Given** device hash ≠ UI hash 의심 시, **When** modal 의 "Cancel" 클릭, **Then** 서명 흐름 즉시 중단 + history 기록 0.
-4. **Given** Ledger 가 미연결 / 앱 미오픈, **When** "Sign" 시도, **Then** 명확한 에러 메시지 + 동선 안내 ("Ethereum app open, Blind signing on").
+1. **Given** MetaMask 의 active account 가 imported Ledger account, **When** "Sign + Submit", **Then** MetaMask 가 device 와 통신 → device 가 domain hash + message hash 표시.
+2. **Given** device 화면이 표시한 두 hash, **When** 사용자가 SPA Preview 의 domain_hash / message_hash 와 비교, **Then** 일치 시 device 의 양쪽 버튼 confirm → MetaMask 가 signature 반환 → POST.
+3. **Given** device hash 가 Preview hash 와 다름 (host 탈취 의심), **When** 사용자가 device 에서 reject, **Then** MetaMask 에서 4001 에러 → UI 가 "User rejected the signature" 표시 + history 기록 0.
+4. **Given** Ledger 가 미연결 / 앱 미오픈, **When** sign 시도, **Then** MetaMask 가 device-not-available 에러 → UI 가 그 메시지 표시.
 
 ---
 
-### User Story 4 — Mainnet 활성 (P3, Tier 2)
+### User Story 4 — Mainnet 활성 (P3, Tier 1 → Tier 2 단계적)
 
 **시나리오**: Tier 0/1 안정 후, builnad 는 mainnet 빌드 (`NEXT_PUBLIC_MAINNET_ENABLED=true`) 를 만들어 별도 배포. CHARTER §7 의 5개 gate 통과 시점에서.
 

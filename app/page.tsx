@@ -1,8 +1,9 @@
 'use client';
 
-// T035 — main page. Orchestrates the state machine described in contracts/ui.md.
+// T035 — main page. State machine described in contracts/ui.md.
+// Single wallet path: MetaMask (with optional Ledger-import account inside it).
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NetworkSelector } from '@/components/NetworkSelector';
 import { ActionPasteBox } from '@/components/ActionPasteBox';
 import { ActionPreview } from '@/components/ActionPreview';
@@ -17,9 +18,10 @@ import {
   SubmitHttpError,
   SubmitNetworkError,
   type Network,
+  type SignatureRSV,
   type ValidatorL1VoteAction,
 } from '@/lib/signing';
-import { signTypedDataMetaMask, WalletRejectedError } from '@/lib/wallet/metamask';
+import { signTypedDataMetaMask, WalletChainError, WalletRejectedError } from '@/lib/wallet/metamask';
 import {
   actionFingerprint,
   getEntry,
@@ -41,17 +43,21 @@ export default function HomePage() {
   const [parsed, setParsed] = useState<ParseResult | null>(null);
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [resp, setResp] = useState<ResponseState>({ kind: 'idle' });
-  const [dedupOverride, setDedupOverride] = useState<string | null>(null); // fingerprint user OK'd
+  const [dedupOverride, setDedupOverride] = useState<string | null>(null);
   const [pendingDedup, setPendingDedup] = useState<HistoryEntry | null>(null);
 
   const action: ValidatorL1VoteAction | null = parsed?.ok ? parsed.action : null;
-  const storageWarn = useMemo(() => storageStatus(), []);
+
+  // Run storage probe only after mount (avoid SSR hydration mismatch).
+  const [storageWarn, setStorageWarn] = useState<string | null>(null);
+  useEffect(() => {
+    setStorageWarn(storageStatus());
+  }, []);
 
   const canSign = network !== null && action !== null && wallet !== null && resp.kind !== 'pending';
 
   const doSubmit = useCallback(
     async (a: ValidatorL1VoteAction, n: Network, w: WalletState) => {
-      // Re-compute everything at submit time so the nonce is fresh.
       const nonce = BigInt(Date.now());
       const isMainnet = n === 'mainnet';
       const ah = actionHash(a, nonce, null, null);
@@ -59,12 +65,22 @@ export default function HomePage() {
       const typed = l1Payload(pa);
 
       setResp({ kind: 'pending', phase: 'signing' });
-      let signature;
+      let signature: SignatureRSV;
       try {
         signature = await signTypedDataMetaMask(w.account, typed);
       } catch (e) {
         if (e instanceof WalletRejectedError) {
-          setResp({ kind: 'error', error: 'User rejected the signature.' });
+          setResp({ kind: 'error', error: e.message });
+          return;
+        }
+        if (e instanceof WalletChainError) {
+          setResp({
+            kind: 'error',
+            error:
+              `${e.message}\n\nHL signing forces chainId=1337 (phantom). Your MetaMask must ` +
+              `be on this chain before signing. If auto-add failed, add it manually: ` +
+              `Networks → Add → chainId 1337, any RPC, currency PHA.`,
+          });
           return;
         }
         setResp({ kind: 'error', error: (e as Error).message });
@@ -88,7 +104,6 @@ export default function HomePage() {
 
       setResp({ kind: 'success', response });
 
-      // record dedup entry
       const fp = actionFingerprint(a);
       const entry: HistoryEntry = {
         key: fp,
@@ -144,9 +159,7 @@ export default function HomePage() {
 
       <ActionPasteBox onResult={setParsed} />
 
-      {action && network && (
-        <ActionPreview action={action} network={network} />
-      )}
+      {action && network && <ActionPreview action={action} network={network} />}
 
       <WalletSelector value={wallet} onChange={setWallet} />
 

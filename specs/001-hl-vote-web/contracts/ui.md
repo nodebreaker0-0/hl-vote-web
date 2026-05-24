@@ -45,12 +45,12 @@
 | `NetworkSelector` | `components/NetworkSelector.tsx` | testnet/mainnet 토글. Constitution VIII: default 없음. mainnet 빌드 아니면 mainnet 옵션 disabled. |
 | `ActionPasteBox` | `components/ActionPasteBox.tsx` | textarea, JSON parse on blur, hex private-key guard |
 | `ActionPreview` | `components/ActionPreview.tsx` | msgpack hex, action_hash, typed-data preview |
-| `WalletSelector` | `components/WalletSelector.tsx` | MetaMask / Ledger 토글, 연결된 주소 표시 |
-| `LedgerConnector` | `components/LedgerConnector.tsx` | WebHID prompt, derivation path 입력, 주소 조회 |
-| `DeviceHashConfirmModal` | `components/DeviceHashConfirmModal.tsx` | Constitution VII: typed-confirm |
+| `WalletSelector` | `components/WalletSelector.tsx` | MetaMask only (Ledger 는 MetaMask 의 import 된 account 로 사용) |
 | `DedupModal` | `components/DedupModal.tsx` | Constitution IX: 동일 action 재submit 시 |
 | `ResponseViewer` | `components/ResponseViewer.tsx` | HF 응답 JSON 표시, 성공/실패 색상 |
 | `HistoryViewer` | `app/history/page.tsx` (Tier 2) | localStorage `hlVoteHistory` 리스트 |
+| ~~`LedgerConnector`~~ | (removed) | merged into MetaMask path |
+| ~~`DeviceHashConfirmModal`~~ | (removed) | merged into MetaMask path (operator-procedure cross-verify) |
 
 ## 3. State machine
 
@@ -192,13 +192,13 @@ Tailwind 기본 팔레트로 충분. 외부 폰트 / 이미지 로드 X (Constit
 
 ## 9. CSP
 
-빌드 시 `app/layout.tsx` 의 `<head>` 에 정적 meta:
+빌드 시 `app/layout.tsx` 의 `<head>` 에 정적 meta. `connect-src` 는 build flag 분기:
 
 ```html
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  connect-src 'self' https://api.hyperliquid.xyz https://api.hyperliquid-testnet.xyz;
-  script-src 'self';
+  connect-src 'self' https://api.hyperliquid-testnet.xyz [+ mainnet URL if NEXT_PUBLIC_MAINNET_ENABLED];
+  script-src 'self' 'unsafe-inline';
   style-src 'self' 'unsafe-inline';
   img-src 'self' data:;
   object-src 'none';
@@ -207,7 +207,19 @@ Tailwind 기본 팔레트로 충분. 외부 폰트 / 이미지 로드 X (Constit
 ">
 ```
 
-`'unsafe-inline'` for style 은 Tailwind 의 CSS-in-JS / Next.js inline style 때문에 불가피. JS 쪽은 `'unsafe-inline'` 금지.
+### `'unsafe-inline'` trade-off (script-src)
+
+Next.js 14 static export 는 hydration data 를 inline `<script>self.__next_f.push(...)</script>` 로 전달한다. nonce 기반 CSP 는 middleware 필요 → `output: 'export'` 와 양립 불가. 따라서 `'unsafe-inline'` 추가가 강제.
+
+해석:
+- `out/` 안의 모든 inline script 는 **build-time generated**. 사용자 입력이 흘러 들어가지 않으므로 전형적인 XSS surface 가 구조적으로 없음.
+- third-party origin 의 `<script src=>` 는 여전히 `'self'` 에 의해 차단.
+- host-탈취 위협은 CSP 가 아니라 **Ledger device hash 사용자 확인** (Constitution VII) 및 **release SHA-256 게시** 로 대응 (CHARTER §6).
+- Phase E polish 에서 hash-based CSP (각 inline script 의 SHA-256 화이트리스트) 검토.
+
+### `style-src 'unsafe-inline'`
+
+Tailwind / Next.js 의 inline style. 불가피, JS 쪽과 무관.
 
 ## 10. 비기능 (logging / analytics)
 

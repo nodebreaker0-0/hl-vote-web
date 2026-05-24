@@ -85,10 +85,9 @@ UI 는 inner key (`O` / `D` / 새로 추가될 키) 를 type 분류하여 표시
 | Framework | **Next.js 14 App Router with `output: 'export'`** | static export → CDN/IPFS/file:// 호스팅. SSR 절대 사용 X (Constitution I) |
 | Language | **TypeScript strict** | signing 같은 cryptographic 코드는 타입으로 잡아야 안전 |
 | Styling | **Tailwind CSS** | 외부 CSS 의존성 최소, build-time 으로 모두 inline |
-| EVM wallet | **wagmi v2 + viem** | EIP-712 typed data signing 표준. viem의 `signTypedData` 사용 |
-| Ledger | **@ledgerhq/hw-app-eth + @ledgerhq/hw-transport-webhid** | WebHID 는 Chromium 계열만 동작 (정상. blind sign 도 device 측 prompt) |
+| EVM wallet | **MetaMask EIP-1193 직접 호출** (window.ethereum.request) | wagmi/viem 의존성 부담 회피. eth_signTypedData_v4 만 사용. Ledger 는 MetaMask 가 import 해서 라우팅 |
 | msgpack | **@msgpack/msgpack** | Python `msgpack.packb` 와 wire-compat. golden fixture 로 byte-equality 검증 |
-| Hash | **viem 의 `keccak256`** | Python eth-utils 의 `keccak` 와 동일 (Keccak-256, NOT SHA3) |
+| Hash | **@noble/hashes (keccak_256)** | Python eth-utils 의 `keccak` 와 동일 (Keccak-256, NOT SHA3) |
 | Test | **vitest** | jest 대비 ESM 친화, Next.js 14 와 충돌 적음 |
 | Lint | **eslint + prettier + @typescript-eslint/strict** | |
 | Verify gate | **Makefile** (vpub-exporter 와 동일 패턴) | `make verify` 한 줄로 전체 게이트 |
@@ -162,11 +161,13 @@ mainnet 활성 토글은 **빌드 시 environment variable** 로만 가능: `NEX
 
 ## 9. Tier gating (vpub-exporter 와 동일 패턴)
 
+> **v0.2 update**: Tier 1 (별도 WebHID 직접) 은 폐기. MetaMask 가 자체적으로 import 한 Ledger account 로 `eth_signTypedData_v4` 를 device 에 라우팅하므로 wallet path 하나로 두 동선이 통합됨 (Constitution §VII).
+
 | Tier | 범위 | exit criteria |
 |---|---|---|
-| **Tier 0 (MVP)** | MetaMask 만, testnet 만, paste-and-sign + submit + dedup cache. **action type 무관** — outcome / delisting / governance / 향후 `validatorL1Vote` 변형 전체를 동일 흐름으로 처리 | testnet 에서 outcome 1건 + delisting 1건 (=2종 type) vote 성공 + golden fixture 통과 |
-| **Tier 1** | Ledger WebHID (Nano 시리즈) 추가, derivation path 선택, device hash 확인 모달. Mac local 동선 (현재 Python venv 동선) 완전 대체 | Ledger 로 testnet 3건 (서로 다른 action inner shape) vote 성공 |
-| **Tier 2** | mainnet 활성, action inner-shape 별 friendly 요약 (UI 만; msgpack 직렬화는 paste 그대로 유지), history viewer | mainnet 5건 성공 + §7 gate 통과 |
+| **Tier 0 (MVP)** | MetaMask 만 (testnet 은 hot v-key import / mainnet 은 Ledger account import 한 MetaMask). testnet only. paste-and-sign + submit + dedup. action type 무관 — outcome / delisting / 향후 `validatorL1Vote` 변형 전체 동일 흐름 | testnet 에서 outcome 1건 + delisting 1건 vote 성공 + golden fixture 100/100 |
+| **Tier 1** | mainnet 활성 빌드 (`NEXT_PUBLIC_MAINNET_ENABLED=true`) + history viewer. UI 변경 최소. MetaMask + 임포트된 Ledger account 동선으로 mainnet 서명 | mainnet 1건 (저위험 delisting 또는 outcome) 성공 + §7 게이트 통과 |
+| **Tier 2** | action inner-shape 별 friendly 요약 (UI 만; msgpack 직렬화는 paste 그대로 유지), IPFS pin, release SHA-256 publishing 자동화 | 운영 1주 안정 + builnad 명시 sign-off |
 
 ## 10. Repository layout (proposed)
 

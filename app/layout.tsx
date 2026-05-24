@@ -15,10 +15,20 @@ const HF_ORIGINS = ['https://api.hyperliquid-testnet.xyz']
   .concat(MAINNET_ENABLED ? ['https://api.hyperliquid.xyz'] : [])
   .join(' ');
 
+// 'unsafe-inline' on script-src is a forced compromise: Next.js 14 static
+// export emits inline `<script>self.__next_f.push(...)</script>` blocks to
+// transport hydration data, and a nonce strategy requires middleware which is
+// incompatible with `output: 'export'`. Concretely:
+//   - all inline scripts in out/ are build-time generated; no user input flows
+//     into them, so the classic XSS attack surface this directive normally
+//     defends is structurally absent.
+//   - third-party origins for scripts remain blocked by 'self'.
+//   - CHARTER §6 host-takeover threat is mitigated separately (operator
+//     verifies device hash on Ledger; bundle SHA-256 publishable per release).
 const CSP =
   "default-src 'self'; " +
   `connect-src 'self' ${HF_ORIGINS}; ` +
-  "script-src 'self'; " +
+  "script-src 'self' 'unsafe-inline'; " +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data:; " +
   "object-src 'none'; " +

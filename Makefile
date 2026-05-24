@@ -93,21 +93,13 @@ constitution-gate:
 		--exclude-dir=node_modules --exclude-dir=.next --exclude-dir=out --exclude-dir=out-mainnet --exclude-dir=tests . 2>/dev/null \
 		|| (echo "  potential hex private key in source"; exit 1)
 	@echo "  ok"
-	@echo "== V.   dependency count <= 15 =="
+	@echo "== V.   dependency count <= 10 =="
 	@deps=$$(node -e "console.log(Object.keys(require('./package.json').dependencies||{}).length)"); \
 		echo "  direct deps: $$deps"; \
-		test $$deps -le 15 || (echo "  TOO MANY direct deps"; exit 1)
+		test $$deps -le 10 || (echo "  TOO MANY direct deps"; exit 1)
 	@echo "== VI.  golden fixtures dir present =="
 	@test -d tests/golden && echo "  ok" || (echo "  tests/golden missing"; exit 1)
-	@echo "== VII. DeviceHashConfirmModal referenced when Ledger code present =="
-	@# Trigger only when lib/ledger/ contains real .ts files (not just placeholder dir).
-	@if [ -d lib/ledger ] && [ -n "$$(find lib/ledger -maxdepth 1 -name '*.ts' 2>/dev/null)" ]; then \
-		grep -rnE "DeviceHashConfirmModal" components/ app/ >/dev/null 2>&1 \
-			|| (echo "  ledger code present but DeviceHashConfirmModal not referenced"; exit 1); \
-	else \
-		echo "  (skipped — no ledger code yet, Tier 1)"; \
-	fi
-	@echo "  ok"
+	@echo "== VII. (removed — single wallet path, see constitution.md §VII) =="
 	@echo "== VIII. NetworkSelector has no default value =="
 	@if [ -f components/NetworkSelector.tsx ]; then \
 		! grep -nE "defaultValue|defaultChecked" components/NetworkSelector.tsx 2>/dev/null \

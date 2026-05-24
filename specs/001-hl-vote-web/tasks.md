@@ -100,16 +100,18 @@ description: "hl-vote-web implementation tasks (Tier 0+1+2)"
 
 ---
 
-## Phase 4 — Tier 1 UI (Ledger Nano via WebHID)
+## Phase 4 — DROPPED (was Tier 1 WebHID-direct)
 
-- [ ] **T050** [Tier-1] [US3] `lib/ledger/transport.ts` — `@ledgerhq/hw-transport-webhid` dynamic import. 브라우저 지원 감지.
-- [ ] **T051** [Tier-1] [US3] `lib/ledger/sign.ts` — `Eth.signEIP712HashedMessage(path, domain_hash, message_hash)` wrapper.
-- [ ] **T052** [Tier-1] [US3] `components/LedgerConnector.tsx` — WebHID prompt, derivation path 입력, 주소 표시.
-- [ ] **T053** [Tier-1] [US3] `components/DeviceHashConfirmModal.tsx` — Constitution VII. checkbox + typed "CONFIRM".
-- [ ] **T054** [Tier-1] [US3] `WalletSelector` 에 Ledger 추가. Firefox/Safari 시 disabled + 안내.
-- [ ] **T055** [Tier-1] [US3] `app/page.tsx` 의 state machine 에 `ledger_confirm` / `signing_ledger` 분기.
+> **2026-05-24**: Tier 1 was originally a separate Ledger WebHID code path (`lib/ledger/*`, `LedgerConnector`, `DeviceHashConfirmModal`). It was implemented, then removed once it became clear that MetaMask routes typed-data signing to imported Ledger accounts transparently. The Constitution §VII safeguard now lives at the operator-procedure level (mainnet first-N cross-verify) rather than as a UI modal.
+>
+> The four files (`lib/ledger/transport.ts`, `lib/ledger/sign.ts`, `components/LedgerConnector.tsx`, `components/DeviceHashConfirmModal.tsx`) ship as empty `export {}` stubs and must be `rm`-ed by the next merge. The `@ledgerhq/*` direct deps were removed (Constitution §V cap is now ≤10).
 
-**Checkpoint 4**: Ledger 로 testnet 3건 vote 성공 (QS-2). device hash 수동 검증 통과.
+- [x] **T050** Removed.
+- [x] **T051** Removed.
+- [x] **T052** Removed.
+- [x] **T053** Removed.
+- [x] **T054** Removed — `WalletSelector` reverted to MetaMask-only.
+- [x] **T055** Removed — `app/page.tsx` reverted to single sign-and-submit path.
 
 ---
 

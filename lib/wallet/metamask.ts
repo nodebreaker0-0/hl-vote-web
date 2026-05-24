@@ -47,12 +47,84 @@ export async function connectMetaMask(): Promise<`0x${string}`> {
   }
 }
 
+// Hyperliquid L1 actions embed a phantom domain with chainId 1337. MetaMask v11+
+// enforces that typed-data domain.chainId equals the wallet's active chainId,
+// so we must add/switch to a phantom 1337 chain in the wallet before signing.
+// Trade-off: this leaves a "Hyperliquid L1 Signer (phantom)" entry in the user's
+// network list. The chain has no real RPC; it is signer-only.
+const HL_PHANTOM_CHAIN = {
+  chainId: '0x539', // 1337
+  chainName: 'Hyperliquid L1 Signer (phantom 1337)',
+  nativeCurrency: { name: 'Phantom', symbol: 'PHA', decimals: 18 },
+  // MetaMask requires at least one rpcUrls entry. This URL never receives
+  // JSON-RPC traffic from us; we only use this chain for typed-data signing.
+  rpcUrls: ['https://api.hyperliquid-testnet.xyz'],
+  blockExplorerUrls: [],
+};
+
+export class WalletChainError extends Error {}
+
+export async function ensureHLPhantomChain(): Promise<void> {
+  const p = getProvider();
+  if (!p) throw new WalletNotFoundError();
+
+  // Already on 1337? Done.
+  const currentHex = (await p.request({ method: 'eth_chainId' })) as string;
+  if (currentHex === '0x539') return;
+
+  // Try to switch first.
+  try {
+    await p.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x539' }],
+    });
+    return;
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    // 4902 = chain not added to wallet
+    if (code !== 4902 && code !== -32603) {
+      if (code === 4001) throw new WalletRejectedError('User rejected chain switch.');
+      throw e;
+    }
+  }
+
+  // Add the phantom chain, then switch.
+  try {
+    await p.request({
+      method: 'wallet_addEthereumChain',
+      params: [HL_PHANTOM_CHAIN],
+    });
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    if (code === 4001) throw new WalletRejectedError('User rejected adding the phantom chain.');
+    throw new WalletChainError(
+      `Failed to add Hyperliquid phantom chain (1337): ${(e as Error).message}. ` +
+        `Add it manually in MetaMask: Settings → Networks → Add manually. ` +
+        `chainId=1337, name="HL Signer", any RPC, currency PHA.`,
+    );
+  }
+
+  // wallet_addEthereumChain typically auto-switches, but verify and switch if not.
+  const afterHex = (await p.request({ method: 'eth_chainId' })) as string;
+  if (afterHex !== '0x539') {
+    await p.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x539' }],
+    });
+  }
+}
+
 export async function signTypedDataMetaMask(
   account: `0x${string}`,
   typed: L1TypedData,
 ): Promise<SignatureRSV> {
   const p = getProvider();
   if (!p) throw new WalletNotFoundError();
+
+  // Constitution-level guard: typed-data demands chainId=1337. Make sure the
+  // wallet is on that chain before requesting the signature.
+  await ensureHLPhantomChain();
+
   // eth_signTypedData_v4 takes the typed-data JSON as a string.
   const payload = JSON.stringify(typed);
   let sigHex: string;

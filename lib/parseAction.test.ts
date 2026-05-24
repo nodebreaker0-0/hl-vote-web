@@ -51,4 +51,31 @@ describe('parseAction', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.credentialDetected).toBe(true);
   });
+
+  it('handles Python-style "action = {...}" paste', () => {
+    const r = parseAction('action = {"type": "validatorL1Vote", "D": "test"}');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.variant).toBe('delisting');
+      expect(r.action).toEqual({ type: 'validatorL1Vote', D: 'test' });
+    }
+  });
+
+  it('handles trailing semicolon', () => {
+    const r = parseAction('{"type":"validatorL1Vote","D":"x"};');
+    expect(r.ok).toBe(true);
+  });
+
+  it('handles "const action = {...};" wrapper', () => {
+    const r = parseAction('const action = {"type":"validatorL1Vote","D":"x"};');
+    expect(r.ok).toBe(true);
+  });
+
+  it('handles nested braces inside string values', () => {
+    const r = parseAction(
+      'action = {"type":"validatorL1Vote","D":"contains } and { chars"}',
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.action['D']).toBe('contains } and { chars');
+  });
 });
