@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import {
   connectMetaMask,
+  getActiveChainId,
   hasMetaMask,
   WalletNotFoundError,
   WalletRejectedError,
@@ -32,15 +33,44 @@ export interface WalletSelectorProps {
   onChange: (w: WalletState | null) => void;
 }
 
+function chainLabel(id: number): string {
+  if (id === 999) return 'HyperEVM Mainnet (999)';
+  if (id === 998) return 'HyperEVM Testnet (998)';
+  if (id === 1337) return 'EIP712signer (1337)';
+  return String(id);
+}
+
 export function WalletSelector({ value, onChange }: WalletSelectorProps) {
   const [mounted, setMounted] = useState(false);
   const [available, setAvailable] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
     setAvailable(hasMetaMask());
   }, []);
+
+  // Poll chainId while connected (handles wallet's chain switches).
+  useEffect(() => {
+    if (!value) return;
+    let cancelled = false;
+    const update = () => {
+      getActiveChainId()
+        .then((c) => {
+          if (!cancelled) setChainId(c);
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    };
+    update();
+    const t = setInterval(update, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [value]);
 
   const connect = async () => {
     setErr(null);
@@ -78,6 +108,13 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
       {value && (
         <p className="mt-3 text-xs text-hl-subtle">
           account: <code className="font-mono text-hl-text">{value.account}</code>
+          {chainId !== null && (
+            <>
+              {' '}
+              &middot; active chain:{' '}
+              <code className="font-mono text-hl-text">{chainLabel(chainId)}</code>
+            </>
+          )}
         </p>
       )}
 
@@ -87,12 +124,11 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
       {err && <p className="mt-2 text-xs text-mainnet">{err}</p>}
 
       <p className="mt-3 border-t border-hl-border pt-3 text-[11px] leading-relaxed text-hl-subtle">
-        HL signing requires <code className="font-mono text-hl-text">chainId 1337</code>. On first
-        sign, MetaMask will prompt to add &amp; switch to a signer-only chain entry called{' '}
+        HL signing requires <code className="font-mono text-hl-text">chainId 1337</code> on the
+        wire (verified: HF&apos;s recovery hardcodes 1337 for L1 actions). On first sign,
+        MetaMask will prompt to add &amp; switch to a signer-only chain entry called{' '}
         <code className="font-mono text-hl-text">EIP712signer</code> (currency{' '}
-        <code className="font-mono text-hl-text">TMP</code>) — approve. The chain never receives
-        RPC traffic; it exists only so MetaMask&apos;s chain-match check on EIP-712 typed-data
-        passes.
+        <code className="font-mono text-hl-text">TMP</code>). Subsequent signs are one popup.
         <br />
         <strong className="text-hl-text">Testnet</strong>: hot v-key imported into MetaMask.{' '}
         <strong className="text-hl-text">Mainnet</strong>: use a MetaMask account that&apos;s an

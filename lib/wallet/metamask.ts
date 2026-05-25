@@ -117,6 +117,14 @@ export async function ensureHLPhantomChain(): Promise<void> {
   }
 }
 
+/** Returns the wallet's currently active chain id as a decimal number. */
+export async function getActiveChainId(): Promise<number> {
+  const p = getProvider();
+  if (!p) throw new WalletNotFoundError();
+  const hex = (await p.request({ method: 'eth_chainId' })) as string;
+  return parseInt(hex, 16);
+}
+
 export async function signTypedDataMetaMask(
   account: `0x${string}`,
   typed: L1TypedData,
@@ -124,8 +132,18 @@ export async function signTypedDataMetaMask(
   const p = getProvider();
   if (!p) throw new WalletNotFoundError();
 
-  // Constitution-level guard: typed-data demands chainId=1337. Make sure the
-  // wallet is on that chain before requesting the signature.
+  // Experiment (Jan/x402 commit 7618ddf) tried signing with the wallet's
+  // active chainId instead of forcing 1337. Result: HF still recovers
+  // with chainId=1337 hardcoded for L1 actions, so signing with anything
+  // else produces a "random" recovered address that doesn't match any
+  // registered v-key. Outcome was `status:"err", "Must deposit ... User:
+  // 0x3e30e42b..."` — a stranger's address falling out of bad recovery.
+  //
+  // Conclusion: L1 actions (`validatorL1Vote`, `placeOrder`, etc.) require
+  // chainId=1337 on the wire. User-signed actions (`SendAsset` etc., which
+  // carry `signatureChainId` in their body) can use any chainId, which is
+  // what Jan's PR demonstrated. The two paths are NOT interchangeable.
+  // Keep `ensureHLPhantomChain` in the call sequence.
   await ensureHLPhantomChain();
 
   // eth_signTypedData_v4 takes the typed-data JSON as a string.

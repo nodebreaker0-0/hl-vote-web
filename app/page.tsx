@@ -23,7 +23,12 @@ import {
   type SignatureRSV,
   type ValidatorL1VoteAction,
 } from '@/lib/signing';
-import { signTypedDataMetaMask, WalletChainError, WalletRejectedError } from '@/lib/wallet/metamask';
+import {
+  getActiveChainId,
+  signTypedDataMetaMask,
+  WalletChainError,
+  WalletRejectedError,
+} from '@/lib/wallet/metamask';
 import {
   actionFingerprint,
   getEntry,
@@ -60,6 +65,32 @@ export default function HomePage() {
   useEffect(() => {
     setStorageWarn(storageStatus());
   }, []);
+
+  // Track wallet's active chainId so ActionPreview shows hashes that actually
+  // match what we'll sign (we sign with whatever chain MetaMask is on).
+  const [walletChainId, setWalletChainId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!wallet) {
+      setWalletChainId(null);
+      return;
+    }
+    let cancelled = false;
+    const update = () => {
+      getActiveChainId()
+        .then((c) => {
+          if (!cancelled) setWalletChainId(c);
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    };
+    update();
+    const t = setInterval(update, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [wallet]);
 
   const canSign = network !== null && action !== null && wallet !== null && resp.kind !== 'pending';
 
@@ -185,7 +216,13 @@ export default function HomePage() {
 
       <ActionInput onResult={setParsed} pinned={pinned ?? undefined} />
 
-      {action && network && <ActionPreview action={action} network={network} />}
+      {action && network && (
+        <ActionPreview
+          action={action}
+          network={network}
+          walletChainId={walletChainId ?? undefined}
+        />
+      )}
 
       <WalletSelector value={wallet} onChange={setWallet} />
 

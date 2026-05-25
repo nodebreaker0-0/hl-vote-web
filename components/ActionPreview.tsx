@@ -28,6 +28,11 @@ export interface ActionPreviewProps {
    *  If absent, preview derives its own `BigInt(Date.now())`. */
   nonce?: bigint;
   onNonceRefresh?: (n: bigint) => void;
+  /** Wallet's currently active chainId — informational only. L1 actions
+   *  are always signed with chainId=1337 (HF hardcodes that in recovery),
+   *  so we display the wallet's chain just so the operator sees there will
+   *  be a chain-switch popup on first sign. */
+  walletChainId?: number;
 }
 
 function HashRow({ label, value }: { label: string; value: string }) {
@@ -39,12 +44,21 @@ function HashRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ActionPreview({ action, network, nonce, onNonceRefresh }: ActionPreviewProps) {
+export function ActionPreview({
+  action,
+  network,
+  nonce,
+  onNonceRefresh,
+  walletChainId,
+}: ActionPreviewProps) {
   const [internalNonce, setInternalNonce] = useState<bigint>(() => BigInt(Date.now()));
   const effectiveNonce = nonce ?? internalNonce;
 
   const isMainnet = network === 'mainnet';
 
+  // L1 actions: HF recovers with chainId=1337 hardcoded. We must sign with
+  // 1337 too (the wallet is switched to that chain right before sign).
+  // Any other chainId leads to a stranger's recovered address and reject.
   const { msgpackHex, ahash, typed, hashes, byteLen } = useMemo(() => {
     const bytes = serialize(action);
     const ah = actionHash(action, effectiveNonce, null, null);
@@ -73,7 +87,10 @@ export function ActionPreview({ action, network, nonce, onNonceRefresh }: Action
       </legend>
 
       <div className="space-y-2">
-        <HashRow label="network" value={`${network} (phantom source = "${isMainnet ? 'a' : 'b'}")`} />
+        <HashRow
+          label="network"
+          value={`${network} (phantom source = "${isMainnet ? 'a' : 'b'}", signing chainId 1337${walletChainId !== undefined && walletChainId !== 1337 ? ` — wallet on ${walletChainId}, will switch to 1337 on sign` : ''})`}
+        />
 
         <div className="grid grid-cols-[110px_minmax(0,1fr)] items-baseline gap-3 py-1">
           <span className="text-xs uppercase tracking-wider text-hl-subtle">nonce</span>
