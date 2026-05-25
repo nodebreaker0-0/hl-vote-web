@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import {
   buildValidatorIndex,
+  governanceForSignerAccount,
   splitVoters,
   type ValidatorIndex,
 } from '@/lib/validators';
@@ -123,13 +124,16 @@ export function VoteStatus({ network, selfSigner, onPickAction }: VoteStatusProp
         <p className="text-sm text-hl-subtle">No pending votes.</p>
       )}
 
+      {/* selfSigner is a *signer* hex (wallet account); votes[] holds *governance* addresses,
+          so we resolve via validatorSummaries first. */}
       <ul className="space-y-3">
         {pending?.map((p, i) => {
           const summary = actionSummary(p);
           const split = idx
             ? splitVoters(idx, p.votes)
             : { voted: [], notVoted: [], unknownVoters: [] };
-          const youVoted = !!selfSigner && p.votes.some((a) => a.toLowerCase() === selfSigner.toLowerCase());
+          const selfGov = idx && selfSigner ? governanceForSignerAccount(idx, selfSigner) : null;
+          const youVoted = !!selfGov && p.votes.some((a) => a.toLowerCase() === selfGov.toLowerCase());
           return (
             <li
               key={i}
