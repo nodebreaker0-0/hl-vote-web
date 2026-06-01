@@ -2,10 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   parseRequest,
   serializeRequest,
+  parseConvertRequest,
+  serializeConvertRequest,
   parseCosigs,
   serializeCosig,
   isAddress,
   type MultiSigRequest,
+  type ConvertRequest,
   type CosignerSig,
 } from './multisigSession';
 
@@ -41,6 +44,41 @@ describe('multisigSession.parseRequest', () => {
 
   it('rejects non-JSON', () => {
     expect(() => parseRequest('not json')).toThrow('Not valid JSON.');
+  });
+});
+
+describe('multisigSession.parseConvertRequest', () => {
+  const base: ConvertRequest = {
+    v: 1,
+    kind: 'convertToMultiSigUser',
+    network: 'testnet',
+    multiSigUser: '0x000000000000000000000000000000000000000a',
+    outerSigner: '0x0000000000000000000000000000000000000003',
+    nonce: '1717200000000',
+    signers: 'null',
+  };
+
+  it('round-trips teardown (signers "null")', () => {
+    expect(parseConvertRequest(serializeConvertRequest(base))).toEqual(base);
+  });
+
+  it('round-trips change (JSON signers string)', () => {
+    const req = {
+      ...base,
+      signers: '{"authorizedUsers": ["0x0000000000000000000000000000000000000003"], "threshold": 1}',
+    };
+    const out = parseConvertRequest(serializeConvertRequest(req));
+    expect(out.signers).toBe(req.signers);
+    expect(out).toEqual(req);
+  });
+
+  it.each([
+    ['wrong kind', { ...base, kind: 'multiSig' }],
+    ['bad multiSigUser', { ...base, multiSigUser: '0xabc' }],
+    ['numeric nonce', { ...base, nonce: 5 }],
+    ['object signers', { ...base, signers: { a: 1 } }],
+  ])('rejects %s', (_label, bad) => {
+    expect(() => parseConvertRequest(JSON.stringify(bad))).toThrow();
   });
 });
 

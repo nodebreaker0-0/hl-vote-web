@@ -17,6 +17,7 @@ import { DedupModal } from '@/components/DedupModal';
 import { VoteStatus } from '@/components/VoteStatus';
 import { MultiSigPanel } from '@/components/MultiSigPanel';
 import { ConvertPanel } from '@/components/ConvertPanel';
+import { ConvertMultiSigPanel } from '@/components/ConvertMultiSigPanel';
 import {
   actionHash,
   l1Payload,
@@ -253,6 +254,8 @@ export default function HomePage() {
       />
 
       <ConvertPanel network={network} />
+
+      <ConvertMultiSigPanel network={network} />
 
       {action && network && (
         <SanityChecklist

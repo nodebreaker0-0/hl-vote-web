@@ -95,6 +95,61 @@ export function parseRequest(text: string): MultiSigRequest {
   };
 }
 
+// ---- convert-via-multisig (MS-040b) request ------------------------------
+// Same copy-paste coordination as a vote, but the inner action is a
+// convertToMultiSigUser (teardown → `signers:"null"`, or change → JSON signers).
+
+export interface ConvertRequest {
+  v: 1;
+  kind: 'convertToMultiSigUser';
+  network: Network;
+  multiSigUser: `0x${string}`;
+  outerSigner: `0x${string}`;
+  nonce: string;
+  /** The exact `signers` string that will be signed: `"null"` or a JSON object. */
+  signers: string;
+}
+
+export function serializeConvertRequest(req: ConvertRequest): string {
+  return (
+    `{"v":1,"kind":"convertToMultiSigUser","network":${JSON.stringify(req.network)},` +
+    `"multiSigUser":${JSON.stringify(req.multiSigUser)},` +
+    `"outerSigner":${JSON.stringify(req.outerSigner)},` +
+    `"nonce":${JSON.stringify(req.nonce)},` +
+    `"signers":${JSON.stringify(req.signers)}}`
+  );
+}
+
+export function parseConvertRequest(text: string): ConvertRequest {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error('Not valid JSON.');
+  }
+  if (typeof raw !== 'object' || raw === null) throw new Error('Expected a JSON object.');
+  const o = raw as Record<string, unknown>;
+  if (o.kind !== 'convertToMultiSigUser') throw new Error('kind must be "convertToMultiSigUser".');
+  if (o.network !== 'mainnet' && o.network !== 'testnet') {
+    throw new Error('network must be "mainnet" or "testnet".');
+  }
+  if (!isAddress(o.multiSigUser)) throw new Error('multiSigUser is not a valid address.');
+  if (!isAddress(o.outerSigner)) throw new Error('outerSigner is not a valid address.');
+  if (typeof o.nonce !== 'string' || !/^\d+$/.test(o.nonce)) {
+    throw new Error('nonce must be a decimal string.');
+  }
+  if (typeof o.signers !== 'string') throw new Error('signers must be a string.');
+  return {
+    v: 1,
+    kind: 'convertToMultiSigUser',
+    network: o.network,
+    multiSigUser: lower(o.multiSigUser),
+    outerSigner: lower(o.outerSigner),
+    nonce: o.nonce,
+    signers: o.signers,
+  };
+}
+
 export function serializeCosig(sig: CosignerSig): string {
   return JSON.stringify({ signer: sig.signer, r: sig.r, s: sig.s, v: sig.v });
 }
