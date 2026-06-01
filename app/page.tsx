@@ -7,7 +7,10 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { NetworkSelector } from '@/components/NetworkSelector';
 import { ActionInput } from '@/components/ActionInput';
+import { ActionSummary } from '@/components/ActionSummary';
 import { ActionPreview } from '@/components/ActionPreview';
+import { SanityChecklist } from '@/components/SanityChecklist';
+import { sanityChecklist } from '@/lib/decode';
 import { WalletSelector, type WalletState } from '@/components/WalletSelector';
 import { ResponseViewer } from '@/components/ResponseViewer';
 import { DedupModal } from '@/components/DedupModal';
@@ -53,12 +56,18 @@ export default function HomePage() {
   const [resp, setResp] = useState<ResponseState>({ kind: 'idle' });
   const [dedupOverride, setDedupOverride] = useState<string | null>(null);
   const [pendingDedup, setPendingDedup] = useState<HistoryEntry | null>(null);
+  const [sanityOk, setSanityOk] = useState(false);
 
   // When the user clicks "Vote on this" in VoteStatus we push the raw JSON
   // into ActionInput's custom mode via a remount-keyed prop.
   const [pinned, setPinned] = useState<{ mode: InputMode; raw: string; key: number } | null>(null);
 
   const action: ValidatorL1VoteAction | null = parsed?.ok ? parsed.action : null;
+  const actionFp = action ? actionFingerprint(action) : '';
+  // Reset the sanity gate whenever the pasted action changes.
+  useEffect(() => {
+    setSanityOk(false);
+  }, [actionFp]);
 
   // Run storage probe only after mount (avoid SSR hydration mismatch).
   const [storageWarn, setStorageWarn] = useState<string | null>(null);
@@ -92,7 +101,8 @@ export default function HomePage() {
     };
   }, [wallet]);
 
-  const canSign = network !== null && action !== null && wallet !== null && resp.kind !== 'pending';
+  const canSign =
+    network !== null && action !== null && wallet !== null && resp.kind !== 'pending' && sanityOk;
 
   const doSubmit = useCallback(
     async (a: ValidatorL1VoteAction, n: Network, w: WalletState) => {
@@ -216,6 +226,8 @@ export default function HomePage() {
 
       <ActionInput onResult={setParsed} pinned={pinned ?? undefined} />
 
+      {action && network && <ActionSummary action={action} network={network} />}
+
       {action && network && (
         <ActionPreview
           action={action}
@@ -225,6 +237,14 @@ export default function HomePage() {
       )}
 
       <WalletSelector value={wallet} onChange={setWallet} />
+
+      {action && network && (
+        <SanityChecklist
+          key={actionFp}
+          items={sanityChecklist(action as unknown as Record<string, unknown>)}
+          onChange={setSanityOk}
+        />
+      )}
 
       <div className="rounded-md border border-hl-border bg-hl-surface p-4">
         <button
@@ -242,6 +262,8 @@ export default function HomePage() {
             {network === null && 'Choose a network. '}
             {action === null && 'Paste a valid validatorL1Vote action. '}
             {wallet === null && 'Connect a wallet. '}
+            {action !== null && network !== null && wallet !== null && !sanityOk &&
+              'Confirm the sanity checklist. '}
           </p>
         )}
       </div>

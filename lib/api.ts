@@ -68,3 +68,38 @@ export interface ValidatorSummary {
 export async function fetchValidatorSummaries(n: Network): Promise<ValidatorSummary[]> {
   return postInfo<ValidatorSummary[]>(n, { type: 'validatorSummaries' });
 }
+
+// ---- outcomeMeta --------------------------------------------------------
+// Deterministic lookup so the operator can resolve an outcome id → market name
+// and side index → side name before signing (the biggest source of human error
+// per validators; see docs/ENDPOINTS.md §1.3). Read-only.
+
+export interface OutcomeSideSpec {
+  name: string;
+}
+
+export interface OutcomeInfo {
+  outcome: number;
+  name: string;
+  description: string;
+  sideSpecs: OutcomeSideSpec[];
+  quoteToken: string;
+}
+
+export interface QuestionInfo {
+  question: number;
+  name: string;
+  description: string;
+  fallbackOutcome?: number;
+  namedOutcomes?: number[];
+  settledNamedOutcomes?: number[];
+}
+
+export interface OutcomeMeta {
+  outcomes: OutcomeInfo[];
+  questions: QuestionInfo[];
+}
+
+export async function fetchOutcomeMeta(n: Network): Promise<OutcomeMeta> {
+  return postInfo<OutcomeMeta>(n, { type: 'outcomeMeta' });
+}

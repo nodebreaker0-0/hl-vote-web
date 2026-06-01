@@ -59,40 +59,54 @@ def signing_hash_from_typed(typed: dict) -> bytes:
     return domain_hash, message_hash, signing_hash
 
 
-# Diverse `validatorL1Vote` actions — outcome (`O`), delisting (`D`), and a
-# couple of "unknown variant" cases to verify pass-through. NO real publisher
-# payloads here (privacy + freshness); only synthetic shapes that stress key
-# order, nesting, unicode, and large integers.
+# Real-shape `validatorL1Vote` templates (field-accurate inner shapes taken from
+# public on-chain mainnet outcome markets / app.hyperliquid.xyz) PLUS synthetic
+# stress shapes. The real ones guarantee that the actual inner shapes — long
+# unicode `details`/`nameAndDescription`, `metadata=` inline tags, large int
+# arrays — serialize byte-exact to the Python SDK (1-byte drift = a different,
+# slashing-unsafe action). No live/private payloads; only public examples.
+_CL_DEPLOY_DESC = (
+    "The market resolves to PSG if UEFA officially crowns Paris Saint-Germain as champion "
+    "of the 2025-26 UEFA Champions League. The market resolves to Arsenal if UEFA officially "
+    "crowns Arsenal as champion of the 2025-26 UEFA Champions League. Match results after "
+    "regular time, extra time, and penalties, if applicable, are all valid for resolution "
+    "purposes. If UEFA crowns either listed club as champion without a completed final match, "
+    "including but not limited to following abandonment, walkover, forfeit, disqualification, "
+    "or administrative decision, the market resolves for that club accordingly. If the final "
+    "is postponed or delayed, the rescheduled final will be used, provided UEFA officially "
+    "crowns a champion by July 1, 2026 at 23:59 UTC. The market resolves to 0.5 if: (a) UEFA "
+    "cancels the 2025-26 UEFA Champions League, (b) UEFA declares no champion, (c) UEFA crowns "
+    "a club other than PSG or Arsenal as champion, (d) UEFA declares any clubs as co-champions, "
+    "or (e) UEFA has not officially crowned a champion by July 1, 2026 at 23:59 UTC. UEFA is the "
+    "primary resolution source, although independent reputable news sources may be used as "
+    "fallback sources if UEFA has not published the relevant result. Once resolved, subsequent "
+    "appeals, corrections, reversals, or champion reassignments by UEFA or any other body will "
+    "not affect the market resolution. metadata=category:sports|subCategory:football"
+)
+_CL_SETTLE_DETAILS = (
+    "UEFA crowned Paris Saint-Germain as champion of the 2025-26 UEFA Champions League after "
+    "PSG and Arsenal drew 1-1 and PSG prevailed 4-3 in the penalty shootout in the final at the "
+    "Puskas Arena in Budapest on May 30, 2026."
+)
 BASE_ACTIONS = [
+    # --- real settle (binary outcome) — mainnet CL + testnet "No Change" ---
+    {"type": "validatorL1Vote", "O": {"settleOutcome": {"outcome": 110, "settleFraction": "1", "details": _CL_SETTLE_DETAILS}}},
+    {"type": "validatorL1Vote", "O": {"settleOutcome": {"outcome": 10205, "settleFraction": "0", "details": "Resolved to No Change (testnet-only)"}}},
+    # --- real deploy (standalone binary outcome) — long unicode + metadata tag ---
+    {"type": "validatorL1Vote", "O": {"registerTokensAndStandaloneOutcome": {"quoteToken": 0, "nameAndDescription": ["Champions League Winner", _CL_DEPLOY_DESC], "sideNames": ["PSG", "Arsenal"]}}},
+    # --- deploy (multi-option question) — stresses a large int array (49 named) ---
+    {"type": "validatorL1Vote", "O": {"registerTokensAndQuestion": {"quoteToken": 0, "nameAndDescription": ["2026 World Cup champion", "Resolves Yes to the listed team officially declared champion. metadata=category:sports|subCategory:football"], "fallbackOutcome": 10231, "namedOutcomes": list(range(10232, 10281))}}},
+    # --- delisting ---
     {"type": "validatorL1Vote", "D": "test"},
     {"type": "validatorL1Vote", "D": "BTC"},
     {"type": "validatorL1Vote", "D": ""},
     {"type": "validatorL1Vote", "D": "한글-id-😀"},
-    # Outcome — register-token style nest
-    {
-        "type": "validatorL1Vote",
-        "O": {
-            "registerTokensAndStandaloneOutcome": {
-                "quoteToken": 0,
-                "nameAndDescription": ["title", "description"],
-                "sideNames": ["yes", "no"],
-            }
-        },
-    },
-    # Outcome — settle style
-    {"type": "validatorL1Vote", "O": {"settle": {"outcomeId": 7, "side": 1}}},
-    # Outcome — deep nesting
+    # --- synthetic stress (nesting / mixed / big int / unknown / empty) ---
     {"type": "validatorL1Vote", "O": {"a": {"b": {"c": {"d": [1, 2, 3]}}}}},
-    # Mixed types
     {"type": "validatorL1Vote", "O": {"flag": True, "n": 0, "x": None, "list": []}},
-    # Numbers — integers must remain int in msgpack
     {"type": "validatorL1Vote", "O": {"big": 4503599627370495}},
-    # Unknown variant — future-proofing
     {"type": "validatorL1Vote", "X": {"foo": "bar"}},
     {"type": "validatorL1Vote", "Y": [1, 2, 3]},
-    # Insertion-order sensitive — type first, then D
-    {"type": "validatorL1Vote", "D": "order-test-a"},
-    # Empty inner object
     {"type": "validatorL1Vote", "O": {}},
 ]
 
@@ -102,12 +116,11 @@ NONCES = [1, 1_000_000, 1_716_530_000_000, 1_999_999_999_999, 0xFFFFFFFFFFFFFFFF
 def gen() -> list[dict]:
     rows: list[dict] = []
     label_seq = 0
-    # Cartesian: action × nonce × is_mainnet, capped at 100.
+    # Full cartesian: every action × nonce × is_mainnet — guarantees every
+    # inner shape is covered (test asserts >= 50; this yields ~140 rows).
     for action in BASE_ACTIONS:
         for nonce in NONCES:
             for is_mainnet in (False, True):
-                if len(rows) >= 100:
-                    break
                 label_seq += 1
                 packed = msgpack.packb(action)
                 digest = action_hash(action, None, nonce, None)
@@ -135,10 +148,6 @@ def gen() -> list[dict]:
                         "typed_data": typed_json,
                     }
                 )
-            if len(rows) >= 100:
-                break
-        if len(rows) >= 100:
-            break
     return rows
 
 

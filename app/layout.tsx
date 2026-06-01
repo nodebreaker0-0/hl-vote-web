@@ -25,10 +25,20 @@ const HF_ORIGINS = ['https://api.hyperliquid-testnet.xyz']
 //   - third-party origins for scripts remain blocked by 'self'.
 //   - CHARTER §6 host-takeover threat is mitigated separately (operator
 //     verifies device hash on Ledger; bundle SHA-256 publishable per release).
+// Dev-only relaxation: `next dev` Fast Refresh (react-refresh) and webpack HMR
+// evaluate code via eval(), which the production `script-src` (no 'unsafe-eval')
+// blocks — that block silently kills hydration so nothing on the page is
+// clickable. `next build` (NODE_ENV=production) emits the STRICT directive, so
+// the shipped out/ artifact is unchanged. 'unsafe-eval' never reaches production.
+const SCRIPT_SRC =
+  process.env.NODE_ENV === 'production'
+    ? "script-src 'self' 'unsafe-inline'; "
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'; ";
+
 const CSP =
   "default-src 'self'; " +
   `connect-src 'self' ${HF_ORIGINS}; ` +
-  "script-src 'self' 'unsafe-inline'; " +
+  SCRIPT_SRC +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data:; " +
   "object-src 'none'; " +

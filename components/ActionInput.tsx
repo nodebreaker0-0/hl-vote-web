@@ -3,7 +3,7 @@
 // Wraps the two input modes (Delisting ticker form / Custom JSON paste)
 // behind one toggle + emits a single ParseResult to the parent.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { InputModeSelector, type InputMode } from '@/components/InputModeSelector';
 import { DelistInput } from '@/components/DelistInput';
 import { ActionPasteBox } from '@/components/ActionPasteBox';
@@ -21,10 +21,15 @@ export function ActionInput({ onResult, pinned }: ActionInputProps) {
   const [mode, setMode] = useState<InputMode>('delist');
   const [lastResult, setLastResult] = useState<ParseResult>(() => parseAction(''));
 
-  // External "pin" — when VoteStatus injects an action, switch mode + push raw.
-  // We don't fully control children's input fields here; the cleanest move is
-  // to remount the inner component via the `key` prop.
-  const effectiveMode = pinned?.mode ?? mode;
+  // External "pin" — when VoteStatus injects an action ("Vote on this"), switch
+  // to its mode ONCE (a new pin = new object identity). After that the user can
+  // freely toggle modes again. We must NOT permanently force pinned.mode, or the
+  // toggle gets stuck (bug: Custom → Vote on this → Delisting wouldn't switch).
+  useEffect(() => {
+    if (pinned) setMode(pinned.mode);
+  }, [pinned]);
+
+  const effectiveMode = mode;
 
   const handle = useCallback(
     (r: ParseResult, raw: string) => {

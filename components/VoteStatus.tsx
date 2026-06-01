@@ -9,18 +9,31 @@ import clsx from 'clsx';
 import {
   fetchValidatorL1Votes,
   fetchValidatorSummaries,
+  fetchOutcomeMeta,
   pendingToAction,
   type ValidatorL1VotePending,
 } from '@/lib/api';
+import { cacheOutcomes } from '@/lib/outcomeMetaCache';
 import {
   buildValidatorIndex,
   governanceForSignerAccount,
-  splitVoters,
   type ValidatorIndex,
 } from '@/lib/validators';
 import type { Network } from '@/lib/signing';
 
 const REFRESH_MS = 30_000;
+
+// Quorum rules by action variant (Jeff, tentative — verified vs quorumReached
+// 2026-06-01: mainnet DIFF 0/8, testnet DIFF 1/12):
+//   - Outcome (`O`):  stake ≥ 20% OR count ≥ 50% of the active set (either suffices).
+//   - Delisting / general governance (`D` / other): 2/3 by stake.
+// "Active set" = validators with isActive === true — JAILED MEMBERS INCLUDED. A
+// validator that voted and was later jailed still counts (its vote stands and it
+// is still a set member; e.g. testnet "bob node" is active+jailed ~63%). Using
+// non-jailed instead drops those votes and diverges from HF (testnet 9/12 DIFF).
+const OUTCOME_STAKE_THRESHOLD = 0.2;
+const OUTCOME_COUNT_THRESHOLD = 0.5;
+const GOV_STAKE_THRESHOLD = 2 / 3;
 
 export interface VoteStatusProps {
   network: Network | null;
@@ -79,6 +92,11 @@ export function VoteStatus({ network, selfSigner, onPickAction }: VoteStatusProp
       setPending(votes);
       setIdx(buildValidatorIndex(summaries));
       setLoadedAt(Date.now());
+      // Continuously cache live outcome names (best-effort) so settle votes can
+      // still be name-resolved after HF drops the outcome from outcomeMeta.
+      fetchOutcomeMeta(network)
+        .then((m) => cacheOutcomes(m.outcomes ?? []))
+        .catch(() => {});
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -129,17 +147,51 @@ export function VoteStatus({ network, selfSigner, onPickAction }: VoteStatusProp
       <ul className="space-y-3">
         {pending?.map((p, i) => {
           const summary = actionSummary(p);
-          const split = idx
-            ? splitVoters(idx, p.votes)
-            : { voted: [], notVoted: [], unknownVoters: [] };
           const selfGov = idx && selfSigner ? governanceForSignerAccount(idx, selfSigner) : null;
           const youVoted = !!selfGov && p.votes.some((a) => a.toLowerCase() === selfGov.toLowerCase());
+
+          // Two sets (verified vs HF quorumReached 2026-06-01: mainnet 0/8, testnet 1/12):
+          //   STAKE over isActive (jailed INCLUDED) — a vote stands even if the validator
+          //     is later jailed (testnet "bob node" active+jailed ~63%).
+          //   COUNT over current active = isActive && !isJailed (the live active
+          //     validator count; avoids testnet's bloated isActive≈102).
+          const isOutcome = 'O' in p.action;
+          const stakeSet = idx ? idx.all.filter((v) => v.isActive) : []; // incl jailed
+          const countSet = idx ? idx.active : []; // non-jailed = current active
+          const voterSet = new Set(p.votes.map((a) => a.toLowerCase()));
+          const votedStakeSide = stakeSet.filter((v) => voterSet.has(v.validator.toLowerCase()));
+          const votedCountSide = countSet.filter((v) => voterSet.has(v.validator.toLowerCase()));
+          const notVotedCount = countSet.filter((v) => !voterSet.has(v.validator.toLowerCase()));
+          // Jailed members who voted: their stake counts but they're not in the headcount.
+          const jailedVoters = votedStakeSide.filter((v) => v.isJailed).map((v) => v.name);
+          const stakeGov = new Set(stakeSet.map((v) => v.validator.toLowerCase()));
+          // Voters not in the active set at all (isActive === false: inactive / removed).
+          const outsideVoters = p.votes
+            .filter((a) => !stakeGov.has(a.toLowerCase()))
+            .map((a) => {
+              const v = idx?.byValidator.get(a.toLowerCase());
+              return v ? `${v.name} (inactive)` : `${a.slice(0, 6)}…${a.slice(-4)} (unmapped)`;
+            });
+          const stakeTotal = stakeSet.reduce((s, v) => s + Number(v.stake), 0);
+          const votedStake = votedStakeSide.reduce((s, v) => s + Number(v.stake), 0);
+          const stakeRatio = stakeTotal > 0 ? votedStake / stakeTotal : 0;
+          // Jailed validators that VOTED are folded into the count set (they voted
+          // while in the set) — added to numerator AND denominator. Only the ones
+          // who voted, not all jailed (that would bloat to isActive ≈ 102).
+          const countNum = votedCountSide.length + jailedVoters.length;
+          const countDen = countSet.length + jailedVoters.length;
+          const countRatio = countDen > 0 ? countNum / countDen : 0;
+          const stakeThreshold = isOutcome ? OUTCOME_STAKE_THRESHOLD : GOV_STAKE_THRESHOLD;
+          const stakeReached = stakeRatio >= stakeThreshold;
+          const countReached = countRatio >= OUTCOME_COUNT_THRESHOLD;
+          // Outcome passes on stake OR count; delisting / governance needs 2/3 stake.
+          const quorumPass = isOutcome ? stakeReached || countReached : stakeReached;
           return (
             <li
               key={i}
               className={clsx(
                 'rounded border p-3',
-                p.quorumReached
+                quorumPass
                   ? 'border-hl-mint bg-hl-mint/5'
                   : youVoted
                     ? 'border-hl-mint-dim bg-hl-bg'
@@ -158,8 +210,8 @@ export function VoteStatus({ network, selfSigner, onPickAction }: VoteStatusProp
                 <div className="shrink-0 text-right text-[11px] text-hl-subtle">
                   <div>expires in {fmtExpire(p.expireTime)}</div>
                   <div>
-                    {p.votes.length} / {idx ? idx.active.length : '?'} voted{' '}
-                    {p.quorumReached && (
+                    {countNum} / {countDen} voted{' '}
+                    {quorumPass && (
                       <span className="ml-1 rounded bg-hl-mint/20 px-1 text-hl-mint">
                         quorum
                       </span>
@@ -173,32 +225,70 @@ export function VoteStatus({ network, selfSigner, onPickAction }: VoteStatusProp
                 </div>
               </div>
 
+              {/* Quorum pass criteria — variant-aware (outcome: stake 20% + count
+                  50%; delisting/gov: 2/3 by stake). */}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                <span
+                  className={clsx(
+                    'rounded px-1.5 py-0.5 tabular-nums',
+                    stakeReached
+                      ? 'bg-hl-mint/15 text-hl-mint'
+                      : 'bg-hl-bg text-hl-subtle ring-1 ring-hl-border',
+                  )}
+                  title="voted stake / total active stake"
+                >
+                  STAKE {(stakeRatio * 100).toFixed(1)}% {stakeReached ? '✓' : '✗'}{' '}
+                  <span className="opacity-60">
+                    / {(stakeThreshold * 100).toFixed(0)}%{isOutcome ? '' : ' (2/3)'}
+                  </span>
+                </span>
+                {isOutcome && (
+                  <span
+                    className={clsx(
+                      'rounded px-1.5 py-0.5 tabular-nums',
+                      countReached
+                        ? 'bg-hl-mint/15 text-hl-mint'
+                        : 'bg-hl-bg text-hl-subtle ring-1 ring-hl-border',
+                    )}
+                    title="voted count / active validator count (need ≥ 50%)"
+                  >
+                    COUNT {countNum}/{countDen} {countReached ? '✓' : '✗'}{' '}
+                    <span className="opacity-60">≥ {OUTCOME_COUNT_THRESHOLD * 100}%</span>
+                  </span>
+                )}
+              </div>
+
               <div className="mt-2 grid grid-cols-2 gap-3 text-[11px]">
                 <div>
-                  <div className="text-hl-subtle">voted ({split.voted.length})</div>
+                  <div className="text-hl-subtle">voted ({votedCountSide.length})</div>
                   <div className="mt-1 max-h-24 overflow-y-auto leading-snug text-hl-text">
-                    {split.voted.length === 0 ? (
+                    {votedCountSide.length === 0 ? (
                       <span className="text-hl-subtle">—</span>
                     ) : (
-                      split.voted.map((v) => v.name).join(', ')
+                      votedCountSide.map((v) => v.name).join(', ')
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="text-hl-subtle">not voted ({split.notVoted.length})</div>
+                  <div className="text-hl-subtle">not voted ({notVotedCount.length})</div>
                   <div className="mt-1 max-h-24 overflow-y-auto leading-snug text-hl-text">
-                    {split.notVoted.length === 0 ? (
+                    {notVotedCount.length === 0 ? (
                       <span className="text-hl-subtle">—</span>
                     ) : (
-                      split.notVoted.map((v) => v.name).join(', ')
+                      notVotedCount.map((v) => v.name).join(', ')
                     )}
                   </div>
                 </div>
               </div>
 
-              {split.unknownVoters.length > 0 && (
+              {jailedVoters.length > 0 && (
                 <div className="mt-2 text-[10px] text-hl-subtle">
-                  unknown voters (jailed / inactive): {split.unknownVoters.length}
+                  voted but currently jailed (counted): {jailedVoters.join(', ')}
+                </div>
+              )}
+              {outsideVoters.length > 0 && (
+                <div className="mt-2 text-[10px] text-hl-subtle">
+                  voted but inactive (excluded): {outsideVoters.join(', ')}
                 </div>
               )}
 
