@@ -5,7 +5,7 @@
 // side indices against `outcomeMeta` (the biggest source of inadvertent human
 // error per HL validators). Never mutates the action or affects msgpack bytes.
 
-import type { OutcomeMeta, OutcomeInfo } from '@/lib/api';
+import type { OutcomeMeta, OutcomeInfo, QuestionInfo } from '@/lib/api';
 
 export type DecodedVariant =
   | 'Delisting'
@@ -21,12 +21,37 @@ export interface DecodeLine {
   emphasis?: boolean;
 }
 
+/** One side of a multi-outcome question (I-7) — each is a Yes/No market. */
+export interface SettleSideRow {
+  outcome: number;
+  name: string;
+  /** Already resolved in a prior settle (settledNamedOutcomes) — piecemeal. */
+  settled: boolean;
+  /** The outcome THIS action settles. */
+  isTarget: boolean;
+  /** The question's fallback (default winner if none of the named ones win). */
+  isFallback: boolean;
+}
+
+/** Context shown when a settleOutcome targets one side of a 3-way+ question. */
+export interface MultiOutcomeContext {
+  questionId: number;
+  questionName: string;
+  fallbackOutcome?: number;
+  rows: SettleSideRow[];
+  /** Named (non-fallback) outcomes and how many already settled (piecemeal). */
+  namedTotal: number;
+  settledCount: number;
+}
+
 export interface DecodedAction {
   variant: DecodedVariant;
   title: string;
   lines: DecodeLine[];
   /** Shown as a red advisory when something can't be resolved / looks risky. */
   warning?: string;
+  /** I-7 — present when the settled outcome belongs to a multi-outcome question. */
+  multiOutcome?: MultiOutcomeContext;
 }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -35,6 +60,43 @@ function asRecord(v: unknown): Record<string, unknown> | null {
 
 function findOutcome(meta: OutcomeMeta | null, id: number): OutcomeInfo | undefined {
   return meta?.outcomes.find((o) => o.outcome === id);
+}
+
+/** The multi-outcome question that owns this outcome id (named or fallback). */
+function findQuestion(meta: OutcomeMeta | null, id: number): QuestionInfo | undefined {
+  return meta?.questions?.find(
+    (q) => (q.namedOutcomes ?? []).includes(id) || q.fallbackOutcome === id,
+  );
+}
+
+/** Build the side-by-side table for a 3-way+ question being settled (I-7). */
+function buildMultiOutcome(
+  meta: OutcomeMeta | null,
+  q: QuestionInfo,
+  targetId: number,
+): MultiOutcomeContext {
+  const named = q.namedOutcomes ?? [];
+  const settled = new Set(q.settledNamedOutcomes ?? []);
+  // Named outcomes first, then the fallback (if not already among them).
+  const ids = [...named];
+  if (q.fallbackOutcome !== undefined && !ids.includes(q.fallbackOutcome)) {
+    ids.push(q.fallbackOutcome);
+  }
+  const rows: SettleSideRow[] = ids.map((oid) => ({
+    outcome: oid,
+    name: findOutcome(meta, oid)?.name ?? `#${oid} (not in meta)`,
+    settled: settled.has(oid),
+    isTarget: oid === targetId,
+    isFallback: oid === q.fallbackOutcome,
+  }));
+  return {
+    questionId: q.question,
+    questionName: q.name,
+    fallbackOutcome: q.fallbackOutcome,
+    rows,
+    namedTotal: named.length,
+    settledCount: named.filter((oid) => settled.has(oid)).length,
+  };
 }
 
 /** Format a settleFraction (continuous X in [0,1]) into yes/no settle values. */
@@ -86,6 +148,15 @@ export function decodeAction(
         { label: 'Sides', value: `[0] yes = ${yesName} · [1] no = ${noName}` },
         { label: 'Details', value: String(v.details ?? ''), emphasis: true },
       ];
+      const q = findQuestion(meta, id);
+      if (q) {
+        const mo = buildMultiOutcome(meta, q, id);
+        lines.push({
+          label: 'Question',
+          value: `${q.name} — settling ${mo.settledCount}/${mo.namedTotal} so far`,
+          emphasis: true,
+        });
+      }
       return {
         variant: 'Outcome settle',
         title: info ? info.name : `settle #${id}`,
@@ -93,6 +164,7 @@ export function decodeAction(
         warning: info
           ? undefined
           : `Outcome #${id} is not in outcomeMeta — confirm the id and side mapping manually before signing.`,
+        multiOutcome: q ? buildMultiOutcome(meta, q, id) : undefined,
       };
     }
 

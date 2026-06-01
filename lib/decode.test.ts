@@ -75,6 +75,52 @@ describe('decodeAction', () => {
     expect(d.title).toBe('BTC above 100k');
   });
 
+  it('settleOutcome (I-7): multi-outcome question → side table + piecemeal count', () => {
+    const multiMeta: OutcomeMeta = {
+      outcomes: [
+        { outcome: 7002, name: 'Other', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDH' },
+        { outcome: 7003, name: 'Akami', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDH' },
+        { outcome: 7004, name: 'Canned Tuna', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDH' },
+        { outcome: 7005, name: 'Otoro', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDH' },
+      ],
+      questions: [
+        {
+          question: 182,
+          name: 'What will Hypurr eat the most of in May 2026?',
+          description: '',
+          fallbackOutcome: 7002,
+          namedOutcomes: [7003, 7004, 7005],
+          settledNamedOutcomes: [7004], // Canned Tuna already settled (piecemeal)
+        },
+      ],
+    };
+    const d = decodeAction(
+      { type: 'validatorL1Vote', O: { settleOutcome: { outcome: 7005, settleFraction: '1' } } },
+      multiMeta,
+    );
+    const mo = d.multiOutcome;
+    expect(mo).toBeDefined();
+    if (!mo) return;
+    expect(mo.questionId).toBe(182);
+    expect(mo.namedTotal).toBe(3);
+    expect(mo.settledCount).toBe(1);
+    // rows: 3 named + fallback = 4
+    expect(mo.rows).toHaveLength(4);
+    const target = mo.rows.find((r) => r.isTarget);
+    expect(target?.outcome).toBe(7005);
+    expect(target?.name).toBe('Otoro');
+    expect(mo.rows.find((r) => r.outcome === 7004)?.settled).toBe(true);
+    expect(mo.rows.find((r) => r.isFallback)?.outcome).toBe(7002);
+  });
+
+  it('settleOutcome: binary outcome (no question) → no multiOutcome', () => {
+    const d = decodeAction(
+      { type: 'validatorL1Vote', O: { settleOutcome: { outcome: 110, settleFraction: '1' } } },
+      meta,
+    );
+    expect(d.multiOutcome).toBeUndefined();
+  });
+
   it('delisting: D variant', () => {
     const d = decodeAction({ type: 'validatorL1Vote', D: 'BLAST' }, null);
     expect(d.variant).toBe('Delisting');

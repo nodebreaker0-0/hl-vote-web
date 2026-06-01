@@ -94,6 +94,51 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
         ))}
       </dl>
 
+      {decoded.multiOutcome && (
+        <div className="mt-3 rounded border border-hl-border bg-hl-bg p-2">
+          <div className="mb-1 text-[11px] text-hl-subtle">
+            Multi-outcome question{' '}
+            <span className="text-hl-text">#{decoded.multiOutcome.questionId}</span> —{' '}
+            <strong className="text-hl-text">
+              {decoded.multiOutcome.settledCount}/{decoded.multiOutcome.namedTotal}
+            </strong>{' '}
+            sides settled so far (piecemeal)
+          </div>
+          <table className="w-full text-[11px]">
+            <tbody>
+              {decoded.multiOutcome.rows.map((r) => (
+                <tr
+                  key={r.outcome}
+                  className={clsx(
+                    'border-t border-hl-border/50',
+                    r.isTarget && 'bg-hl-mint/10',
+                  )}
+                >
+                  <td className="py-1 pr-2 align-top">
+                    {r.isTarget ? (
+                      <span className="rounded bg-hl-mint px-1 text-[9px] font-semibold uppercase text-hl-bg">
+                        this vote
+                      </span>
+                    ) : r.settled ? (
+                      <span className="text-hl-subtle">settled</span>
+                    ) : (
+                      <span className="text-hl-subtle/60">open</span>
+                    )}
+                  </td>
+                  <td className="py-1 pr-2 align-top text-hl-text">
+                    {r.name}
+                    {r.isFallback && (
+                      <span className="ml-1 text-[9px] uppercase text-hl-subtle">fallback</span>
+                    )}
+                  </td>
+                  <td className="mono py-1 text-right align-top text-hl-subtle">#{r.outcome}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="mt-2 text-[10px] text-hl-subtle">
         {metaErr
           ? `live outcomeMeta error — using local cache where available (${metaErr})`

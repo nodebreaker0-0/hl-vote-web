@@ -66,5 +66,7 @@
 4. **I-4** inner-shape golden 커버리지 — ✅ 구현
 5. **I-6** dedup 카피/동작 — ❌ 드롭(votes[]가 이미 처리)
 6. (대기) **I-5** signer key — HF 결정 후
-7. **G-2** multisig vote 서명 — ⏳ 진행 중
-8. **I-7 / I-8** 대형·멀티사이드 마켓 — 수요 생기면
+7. **G-2** multisig vote 서명 + **MS-040a/b** convert setup·change·teardown — ✅ 구현(골든 byte-exact, vote testnet 실측)
+8. **I-7** 멀티사이드/piecemeal settle 표시 — ✅ 구현(2026-06-02): settleOutcome 디코드가 소속 question 을
+   찾아 named outcomes + fallback 을 side 테이블로 표시, settledNamedOutcomes 로 piecemeal(N/M settled) 시각화.
+9. **I-8** 대형 다옵션 마켓 가독성 — 수요 생기면
