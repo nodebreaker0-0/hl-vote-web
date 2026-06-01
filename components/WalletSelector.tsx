@@ -15,8 +15,10 @@ import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import {
   connectMetaMask,
+  disconnectWallet,
   getActiveChainId,
   hasMetaMask,
+  subscribeAccounts,
   WalletNotFoundError,
   WalletRejectedError,
 } from '@/lib/wallet/metamask';
@@ -72,6 +74,14 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
     };
   }, [value]);
 
+  // Keep the connected account in sync with MetaMask. If the user disconnects
+  // from the extension side (revoke → accounts empty), clear our state too.
+  useEffect(() => {
+    return subscribeAccounts((account) => {
+      onChange(account ? { kind: 'metamask', account } : null);
+    });
+  }, [onChange]);
+
   const connect = async () => {
     setErr(null);
     try {
@@ -85,25 +95,49 @@ export function WalletSelector({ value, onChange }: WalletSelectorProps) {
     }
   };
 
+  const disconnect = async () => {
+    setErr(null);
+    await disconnectWallet();
+    setChainId(null);
+    onChange(null);
+  };
+
   return (
     <fieldset className="rounded-md border border-hl-border bg-hl-surface p-4">
       <legend className="px-2 text-xs uppercase tracking-wider text-hl-subtle">Wallet</legend>
 
-      <button
-        type="button"
-        onClick={connect}
-        disabled={!mounted || !available || value?.kind === 'metamask'}
-        className={clsx(
-          'rounded px-4 py-2 text-sm font-medium transition-colors',
-          value?.kind === 'metamask'
-            ? 'bg-hl-mint/20 text-hl-mint ring-2 ring-hl-mint'
-            : available
-              ? 'bg-hl-bg text-hl-text hover:bg-hl-border'
-              : 'cursor-not-allowed bg-hl-bg text-hl-subtle opacity-40',
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={connect}
+          disabled={!mounted || !available || value?.kind === 'metamask'}
+          className={clsx(
+            'rounded px-4 py-2 text-sm font-medium transition-colors',
+            value?.kind === 'metamask'
+              ? 'bg-hl-mint/20 text-hl-mint ring-2 ring-hl-mint'
+              : available
+                ? 'bg-hl-bg text-hl-text hover:bg-hl-border'
+                : 'cursor-not-allowed bg-hl-bg text-hl-subtle opacity-40',
+          )}
+        >
+          {value?.kind === 'metamask' ? 'MetaMask connected' : 'Connect MetaMask'}
+        </button>
+        {value?.kind === 'metamask' && (
+          <button
+            type="button"
+            onClick={() => void disconnect()}
+            className="rounded border border-hl-border px-3 py-2 text-sm text-hl-subtle transition-colors hover:border-mainnet hover:text-mainnet"
+          >
+            Disconnect
+          </button>
         )}
-      >
-        {value?.kind === 'metamask' ? 'MetaMask connected' : 'Connect MetaMask'}
-      </button>
+      </div>
+      {value?.kind === 'metamask' && (
+        <p className="mt-2 text-[11px] text-hl-subtle">
+          To sign with a different account (e.g. a cosigner), click Disconnect, then Connect and pick
+          the account in MetaMask.
+        </p>
+      )}
 
       {value && (
         <p className="mt-3 text-xs text-hl-subtle">

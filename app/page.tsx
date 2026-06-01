@@ -239,6 +239,8 @@ export default function HomePage() {
 
       <WalletSelector value={wallet} onChange={setWallet} />
 
+      <MultiSigPanel action={action} network={network} />
+
       {action && network && (
         <SanityChecklist
           key={actionFp}
@@ -276,8 +278,6 @@ export default function HomePage() {
         selfSigner={wallet?.account ?? null}
         onPickAction={onPickAction}
       />
-
-      <MultiSigPanel action={action} network={network} />
 
       {pendingDedup && (
         <DedupModal

@@ -49,6 +49,24 @@ export async function connectMetaMask(): Promise<`0x${string}`> {
   }
 }
 
+/**
+ * Disconnect: revoke the site's eth_accounts permission so the NEXT connect
+ * re-prompts the MetaMask account picker. This is the only reliable way to let
+ * a cosigner switch to a different account — `eth_accounts` returns only the
+ * accounts the site is permitted for, so merely selecting another account in
+ * the extension does not change what we can sign with. Best-effort: older
+ * MetaMask without wallet_revokePermissions just no-ops.
+ */
+export async function disconnectWallet(): Promise<void> {
+  const p = getProvider();
+  if (!p) return;
+  try {
+    await p.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+  } catch {
+    /* not supported / nothing to revoke */
+  }
+}
+
 // Hyperliquid L1 actions embed a phantom domain with chainId 1337. MetaMask v11+
 // enforces that typed-data domain.chainId equals the wallet's active chainId,
 // so we must add/switch to a 1337 chain in the wallet before signing.
