@@ -5,44 +5,36 @@
 // pretty-print/reorder/normalization. The textarea shows what was pasted.
 
 import clsx from 'clsx';
-import { useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { parseAction, type ParseResult } from '@/lib/parseAction';
 
 export interface ActionPasteBoxProps {
+  /** Controlled value — owned by the parent so "Vote on this" can fill it
+   *  without DOM hacks (which previously mis-targeted the Slack-match box). */
+  value: string;
+  onChange: (next: string) => void;
   onResult: (r: ParseResult, raw: string) => void;
 }
 
-export function ActionPasteBox({ onResult }: ActionPasteBoxProps) {
-  const [raw, setRaw] = useState('');
+export function ActionPasteBox({ value, onChange, onResult }: ActionPasteBoxProps) {
   const [result, setResult] = useState<ParseResult | null>(null);
 
-  const run = useCallback(
-    (next: string) => {
-      setRaw(next);
-      if (next.trim().length === 0) {
-        const r = parseAction('');
-        setResult(r);
-        onResult(r, next);
-        return;
-      }
-      const r = parseAction(next);
-      setResult(r);
-      onResult(r, next);
-      // Constitution IV: if credentials detected, blank the textarea to limit exposure.
-      if (!r.ok && r.credentialDetected) {
-        setRaw('');
-      }
-    },
-    [onResult],
-  );
-
-  const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => run(e.target.value);
+  // Parse whenever the value changes — typed by the user OR injected by the
+  // parent (pin). onResult / onChange are stable (memoised in the parent).
+  useEffect(() => {
+    const r = parseAction(value);
+    setResult(r);
+    onResult(r, value);
+    // Constitution IV: if credentials detected, blank the box to limit exposure.
+    if (!r.ok && r.credentialDetected && value !== '') onChange('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <div>
       <textarea
-        value={raw}
-        onChange={onChange}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         spellCheck={false}
         autoComplete="off"
         rows={8}
@@ -56,13 +48,13 @@ export function ActionPasteBox({ onResult }: ActionPasteBoxProps) {
           'placeholder:text-hl-subtle/60 focus:outline-none focus:ring-2',
           result?.ok
             ? 'ring-1 ring-hl-mint-dim focus:ring-hl-mint'
-            : result && !result.ok && raw.trim().length > 0
+            : result && !result.ok && value.trim().length > 0
               ? 'ring-2 ring-mainnet focus:ring-mainnet'
               : 'ring-1 ring-hl-border focus:ring-hl-mint',
         )}
       />
 
-      {result && !result.ok && raw.trim().length > 0 && (
+      {result && !result.ok && value.trim().length > 0 && (
         <div
           className={clsx(
             'mt-3 rounded p-3 text-sm',

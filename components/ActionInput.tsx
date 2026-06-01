@@ -20,14 +20,18 @@ export interface ActionInputProps {
 
 export function ActionInput({ onResult, pinned }: ActionInputProps) {
   const [mode, setMode] = useState<InputMode>('delist');
+  const [customRaw, setCustomRaw] = useState('');
   const [lastResult, setLastResult] = useState<ParseResult>(() => parseAction(''));
 
   // External "pin" — when VoteStatus injects an action ("Vote on this"), switch
-  // to its mode ONCE (a new pin = new object identity). After that the user can
-  // freely toggle modes again. We must NOT permanently force pinned.mode, or the
-  // toggle gets stuck (bug: Custom → Vote on this → Delisting wouldn't switch).
+  // to its mode ONCE (a new pin = new object identity) and load its raw into the
+  // custom box's controlled value. We feed the value via props (NOT a global
+  // document.querySelector, which mis-targeted the Slack-match textarea). We must
+  // NOT permanently force pinned.mode, or the toggle gets stuck.
   useEffect(() => {
-    if (pinned) setMode(pinned.mode);
+    if (!pinned) return;
+    setMode(pinned.mode);
+    if (pinned.mode === 'custom') setCustomRaw(pinned.raw);
   }, [pinned]);
 
   const effectiveMode = mode;
@@ -50,11 +54,11 @@ export function ActionInput({ onResult, pinned }: ActionInputProps) {
         <InputModeSelector value={effectiveMode} onChange={setMode} />
       </div>
 
-      <div key={`mode-${effectiveMode}-${pinned?.key ?? 0}`}>
+      <div key={`mode-${effectiveMode}`}>
         {effectiveMode === 'delist' ? (
           <DelistInput onResult={handle} />
         ) : (
-          <ActionPasteBox onResult={handle} />
+          <ActionPasteBox value={customRaw} onChange={setCustomRaw} onResult={handle} />
         )}
       </div>
 

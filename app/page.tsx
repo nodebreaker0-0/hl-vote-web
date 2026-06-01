@@ -189,23 +189,10 @@ export default function HomePage() {
     void doSubmit(action, network, wallet);
   }, [pendingDedup, action, network, wallet, doSubmit]);
 
-  // "Vote on this" → switch to custom mode + push raw JSON.
+  // "Vote on this" → switch to custom mode + push the raw JSON in as ActionInput's
+  // controlled value (no DOM querySelector — that mis-targeted the Slack-match box).
   const onPickAction = useCallback((raw: string) => {
     setPinned({ mode: 'custom', raw, key: Date.now() });
-    // Push the raw JSON straight into ActionInput's child by remount + initial value.
-    // We do it via the remount key; ActionInput will read the raw on mount in custom mode.
-    // The simpler implementation: render ActionInput with a controlled initial textarea value.
-    // To keep ActionPasteBox simple we just rely on the user to ⌘V again,
-    // but to make the click meaningful we also pre-fill via the textarea below.
-    requestAnimationFrame(() => {
-      const ta = document.querySelector<HTMLTextAreaElement>('textarea');
-      if (!ta) return;
-      // Use the native setter so React's onChange listener fires.
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-      setter?.set?.call(ta, raw);
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
   }, []);
 
   return (
