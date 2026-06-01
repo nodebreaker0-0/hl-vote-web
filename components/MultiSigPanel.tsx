@@ -31,10 +31,10 @@ import {
   getActiveAccount,
   signTypedDataMetaMask,
   signUserSignedMetaMask,
-  subscribeAccounts,
   WalletChainError,
   WalletRejectedError,
 } from '@/lib/wallet/metamask';
+import { useActiveAccount } from './useActiveAccount';
 import {
   parseRequest,
   serializeRequest,
@@ -80,29 +80,6 @@ function CopyBox({ label, text }: { label: string; text: string }) {
       </pre>
     </div>
   );
-}
-
-/**
- * The live MetaMask account, updated on `accountsChanged`. Multisig signing must
- * use whatever account is *currently* selected in MetaMask (cosigners switch
- * accounts in the extension), NOT the address that happened to be connected on
- * the main page — passing a stale address to eth_signTypedData_v4 makes MetaMask
- * prompt for the wrong account.
- */
-function useActiveAccount(): `0x${string}` | null {
-  const [account, setAccount] = useState<`0x${string}` | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void getActiveAccount().then((a) => {
-      if (!cancelled) setAccount(a);
-    });
-    const unsub = subscribeAccounts((a) => setAccount(a));
-    return () => {
-      cancelled = true;
-      unsub();
-    };
-  }, []);
-  return account;
 }
 
 function errText(e: unknown): string {

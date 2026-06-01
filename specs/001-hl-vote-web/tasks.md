@@ -183,7 +183,14 @@ Phase 1 / Phase 2 의 T010~T014 / T020 / Phase 3 의 T030~T034 등이 자연 단
       `signUserSignedMetaMask`(chainId 0x66eee 전환) + `submitMultiSig`. (D1=paste.)
 - [x] **MS-031** MultiSigPanel 안에서 userToMultiSigSigners 조회·표시 + outerSigner ∈
       authorizedUsers 가드 + cosigner sig를 authorizedSet으로 필터링.
-- [ ] **MS-040** (follow-up) convertToMultiSigUser setup/teardown. (D2: v1 제외 — 빌더·골든은 준비됨.)
+- [x] **MS-040a** convertToMultiSigUser **setup** (normal→multisig, 단일 user-signed 서명).
+      `components/ConvertPanel.tsx` — authorizedUsers+threshold 입력, 이미-멀티시그 감지·가드,
+      signers preview, sign(scheme B)+submit. 제출 action은 SDK처럼 signatureChainId+
+      hyperliquidChain 포함. 골든 ms-convert-*이 서명 hash byte-exact 커버.
+- [ ] **MS-040b** convertToMultiSigUser **teardown/변경** (이미 멀티시그 → normal 또는 서명자 변경).
+      multiSig-wrapped: inner=convert action, cosigner가 **scheme B(user-signed) + multiSig
+      필드(payloadMultiSigUser/outerSigner) 추가**해 서명(`add_multi_sig_fields`/`add_multi_sig_types`).
+      **GOLDEN FIRST** — 새 cosign 변종이라 generator+골든 추가 후 UI. (현재 미구현.)
 
 **Checkpoint MS**: 골든 green + lint/tsc/build/198 tests green (sandbox+Mac). 남은 게이트 =
 **testnet multisig vote 1건 실측** — HF가 cosigner 서명 셋 + outer SendMultiSig를 수락하는지(threshold

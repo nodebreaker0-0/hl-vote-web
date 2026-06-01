@@ -16,6 +16,7 @@ import { ResponseViewer } from '@/components/ResponseViewer';
 import { DedupModal } from '@/components/DedupModal';
 import { VoteStatus } from '@/components/VoteStatus';
 import { MultiSigPanel } from '@/components/MultiSigPanel';
+import { ConvertPanel } from '@/components/ConvertPanel';
 import {
   actionHash,
   l1Payload,
@@ -250,6 +251,8 @@ export default function HomePage() {
         actionRaw={parsed?.ok ? parsed.raw : null}
         network={network}
       />
+
+      <ConvertPanel network={network} />
 
       {action && network && (
         <SanityChecklist

@@ -30,5 +30,11 @@ export type {
   MultiSigAction,
   ConvertToMultiSigUserAction,
 } from './multisig';
-export { submitExchange, submitMultiSig, SubmitNetworkError, SubmitHttpError } from './submit';
-export type { SubmitArgs, SubmitMultiSigArgs } from './submit';
+export {
+  submitExchange,
+  submitMultiSig,
+  submitUserSigned,
+  SubmitNetworkError,
+  SubmitHttpError,
+} from './submit';
+export type { SubmitArgs, SubmitMultiSigArgs, SubmitUserSignedArgs } from './submit';

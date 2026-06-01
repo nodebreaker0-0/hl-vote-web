@@ -54,6 +54,25 @@ export async function submitMultiSig(args: SubmitMultiSigArgs): Promise<unknown>
   });
 }
 
+/** Submit a plain user-signed action (e.g. convertToMultiSigUser setup). */
+export interface SubmitUserSignedArgs {
+  network: Network;
+  /** The full action object as it should appear on the wire. */
+  action: object;
+  nonce: bigint;
+  signature: SignatureRSV;
+}
+
+export async function submitUserSigned(args: SubmitUserSignedArgs): Promise<unknown> {
+  return postExchange(args.network, {
+    action: args.action,
+    nonce: Number(args.nonce),
+    signature: args.signature,
+    vaultAddress: null,
+    expiresAfter: null,
+  });
+}
+
 async function postExchange(network: Network, body: ExchangePayload): Promise<unknown> {
   if (network === 'mainnet' && process.env.NEXT_PUBLIC_MAINNET_ENABLED !== 'true') {
     // Defense in depth — UI already disables this, but trip again here.
