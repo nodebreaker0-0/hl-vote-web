@@ -39,6 +39,7 @@ function chainLabel(id: number): string {
   if (id === 999) return 'HyperEVM Mainnet (999)';
   if (id === 998) return 'HyperEVM Testnet (998)';
   if (id === 1337) return 'EIP712signer (1337)';
+  if (id === 421614) return 'Arb Sepolia (421614)';
   return String(id);
 }
 

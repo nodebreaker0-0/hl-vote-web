@@ -225,6 +225,8 @@ export default function HomePage() {
         </div>
       )}
 
+      <WalletSelector value={wallet} onChange={setWallet} />
+
       <NetworkSelector value={network} onChange={setNetwork} />
 
       <VoteStatus
@@ -244,8 +246,6 @@ export default function HomePage() {
           walletChainId={walletChainId ?? undefined}
         />
       )}
-
-      <WalletSelector value={wallet} onChange={setWallet} />
 
       <MultiSigPanel
         action={action}
