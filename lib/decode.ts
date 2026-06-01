@@ -52,6 +52,8 @@ export interface DecodedAction {
   warning?: string;
   /** I-7 — present when the settled outcome belongs to a multi-outcome question. */
   multiOutcome?: MultiOutcomeContext;
+  /** I-8 — option list for a multi-option deploy (rendered scrollable). */
+  options?: { name: string; description?: string }[];
 }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -190,12 +192,31 @@ export function decodeAction(
       };
     }
 
-    // Deploy (multi-option question) — { registerTokensAndQuestion: { nameAndDescription, namedOutcomes, fallbackOutcome } }
+    // Deploy (multi-option question) — { registerTokensAndQuestion:
+    //   { quoteToken, questionNameAndDescription:[name,desc],
+    //     fallbackNameAndDescription:[name,desc], namedOutcomes:[[name,desc],...] } }
     if (innerKey === 'registerTokensAndQuestion') {
-      const nad = Array.isArray(v.nameAndDescription) ? (v.nameAndDescription as unknown[]) : [];
-      const name = typeof nad[0] === 'string' ? nad[0] : '(unnamed)';
-      const desc = typeof nad[1] === 'string' ? nad[1] : '';
-      const named = Array.isArray(v.namedOutcomes) ? (v.namedOutcomes as unknown[]) : [];
+      // The question name lives in questionNameAndDescription (older shapes used
+      // nameAndDescription); fall back so both decode.
+      const qnd = Array.isArray(v.questionNameAndDescription)
+        ? (v.questionNameAndDescription as unknown[])
+        : Array.isArray(v.nameAndDescription)
+          ? (v.nameAndDescription as unknown[])
+          : [];
+      const name = typeof qnd[0] === 'string' ? qnd[0] : '(unnamed)';
+      const desc = typeof qnd[1] === 'string' ? qnd[1] : '';
+      const namedArr = Array.isArray(v.namedOutcomes) ? (v.namedOutcomes as unknown[]) : [];
+      const options = namedArr.map((el) => {
+        const pair = Array.isArray(el) ? (el as unknown[]) : [];
+        return {
+          name: typeof pair[0] === 'string' ? pair[0] : String(el),
+          description: typeof pair[1] === 'string' ? pair[1] : undefined,
+        };
+      });
+      const fnd = Array.isArray(v.fallbackNameAndDescription)
+        ? (v.fallbackNameAndDescription as unknown[])
+        : [];
+      const fallbackName = typeof fnd[0] === 'string' ? fnd[0] : undefined;
       return {
         variant: 'Outcome deploy (question)',
         title: name,
@@ -203,11 +224,13 @@ export function decodeAction(
           { label: 'Action', value: 'Deploy question (multi-option)' },
           { label: 'Name', value: name, emphasis: true },
           { label: 'Description', value: desc, emphasis: true },
-          { label: 'Options', value: `${named.length} named outcomes` },
-          ...(v.fallbackOutcome !== undefined
-            ? [{ label: 'Fallback', value: `#${String(v.fallbackOutcome)}` }]
+          { label: 'Options', value: `${options.length} options`, emphasis: true },
+          ...(fallbackName ? [{ label: 'Fallback', value: fallbackName }] : []),
+          ...(v.quoteToken !== undefined
+            ? [{ label: 'quoteToken', value: String(v.quoteToken) }]
             : []),
         ],
+        options,
       };
     }
 

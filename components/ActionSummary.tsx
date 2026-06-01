@@ -94,6 +94,25 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
         ))}
       </dl>
 
+      {decoded.options && decoded.options.length > 0 && (
+        <div className="mt-3 rounded border border-hl-border bg-hl-bg p-2">
+          <div className="mb-1 text-[11px] text-hl-subtle">
+            Options <strong className="text-hl-text">({decoded.options.length})</strong> — verify
+            every option before signing
+          </div>
+          <ol className="max-h-60 list-decimal space-y-1 overflow-y-auto pl-5">
+            {decoded.options.map((o, i) => (
+              <li key={i} className="text-[11px] text-hl-text">
+                <span className="font-medium">{o.name}</span>
+                {o.description && (
+                  <span className="block text-hl-subtle">{o.description}</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {decoded.multiOutcome && (
         <div className="mt-3 rounded border border-hl-border bg-hl-bg p-2">
           <div className="mb-1 text-[11px] text-hl-subtle">
@@ -104,6 +123,7 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
             </strong>{' '}
             sides settled so far (piecemeal)
           </div>
+          <div className="max-h-60 overflow-y-auto">
           <table className="w-full text-[11px]">
             <tbody>
               {decoded.multiOutcome.rows.map((r) => (
@@ -136,6 +156,7 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -121,6 +121,34 @@ describe('decodeAction', () => {
     expect(d.multiOutcome).toBeUndefined();
   });
 
+  it('registerTokensAndQuestion (I-8): question name + option list', () => {
+    const d = decodeAction(
+      {
+        type: 'validatorL1Vote',
+        O: {
+          registerTokensAndQuestion: {
+            quoteToken: 0,
+            questionNameAndDescription: ['May CPI year-over-year', 'resolves by ...'],
+            fallbackNameAndDescription: ['Fallback', ''],
+            namedOutcomes: [
+              ['Below 4.3%', 'resolves Yes if below 4.3%'],
+              ['Exactly 4.3%', 'resolves Yes if exactly 4.3%'],
+              ['Above 4.3%', 'resolves Yes if above 4.3%'],
+            ],
+          },
+        },
+      },
+      null,
+    );
+    expect(d.variant).toBe('Outcome deploy (question)');
+    expect(d.title).toBe('May CPI year-over-year'); // reads questionNameAndDescription, not (unnamed)
+    expect(d.options).toHaveLength(3);
+    expect(d.options?.map((o) => o.name)).toEqual(['Below 4.3%', 'Exactly 4.3%', 'Above 4.3%']);
+    const byLabel = Object.fromEntries(d.lines.map((l) => [l.label, l.value]));
+    expect(byLabel['Options']).toBe('3 options');
+    expect(byLabel['Fallback']).toBe('Fallback');
+  });
+
   it('delisting: D variant', () => {
     const d = decodeAction({ type: 'validatorL1Vote', D: 'BLAST' }, null);
     expect(d.variant).toBe('Delisting');
