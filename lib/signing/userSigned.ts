@@ -33,6 +33,24 @@ export const CONVERT_TO_MULTI_SIG_USER_TYPES: Eip712Field[] = [
   { name: 'nonce', type: 'uint64' },
 ];
 
+/**
+ * SDK `add_multi_sig_types`: when a *user-signed* action is wrapped in a
+ * multiSig (e.g. convertToMultiSigUser teardown/change on an already-multisig
+ * address), each cosigner signs the inner action enriched with
+ * payloadMultiSigUser + outerSigner, inserted right after hyperliquidChain.
+ */
+export function addMultiSigSignTypes(fields: Eip712Field[]): Eip712Field[] {
+  const out: Eip712Field[] = [];
+  for (const f of fields) {
+    out.push(f);
+    if (f.name === 'hyperliquidChain') {
+      out.push({ name: 'payloadMultiSigUser', type: 'address' });
+      out.push({ name: 'outerSigner', type: 'address' });
+    }
+  }
+  return out;
+}
+
 export interface UserSignedTypedData {
   domain: { name: string; version: string; chainId: number; verifyingContract: Hex };
   types: Record<string, Eip712Field[]>;

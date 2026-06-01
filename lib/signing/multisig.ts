@@ -9,6 +9,7 @@ import { l1Payload } from './l1Payload';
 import {
   userSignedTypedData,
   userSignedHashes,
+  addMultiSigSignTypes,
   SEND_MULTI_SIG_TYPES,
   CONVERT_TO_MULTI_SIG_USER_TYPES,
   SIGNATURE_CHAIN_ID,
@@ -137,6 +138,57 @@ export function convertTypedData(
       hyperliquidChain: isMainnet ? 'Mainnet' : 'Testnet',
       signers: action.signers,
       nonce: action.nonce,
+    },
+  );
+}
+
+// ---- MS-040b: convertToMultiSigUser executed via a multiSig --------------
+// (teardown / change signers on an address that is ALREADY a multi-sig)
+
+/** The convert inner action carried inside a multiSig payload. Key order
+ *  matches the SDK (type, signatureChainId, hyperliquidChain, signers, nonce) —
+ *  it is msgpack'd into multiSigActionHash, so order is byte-critical. */
+export interface ConvertInnerAction {
+  type: 'convertToMultiSigUser';
+  signatureChainId: string;
+  hyperliquidChain: 'Mainnet' | 'Testnet';
+  signers: string;
+  nonce: number;
+}
+
+/** `signers: "null"` converts back to a normal user; a JSON signers string
+ *  changes the authorized set / threshold. */
+export function convertInnerAction(
+  signers: string,
+  nonce: bigint,
+  isMainnet: boolean,
+): ConvertInnerAction {
+  return {
+    type: 'convertToMultiSigUser',
+    signatureChainId: SIGNATURE_CHAIN_ID,
+    hyperliquidChain: isMainnet ? 'Mainnet' : 'Testnet',
+    signers,
+    nonce: Number(nonce),
+  };
+}
+
+/** Cosigner typed-data for a convert-via-multiSig (scheme B, enriched with
+ *  payloadMultiSigUser + outerSigner). Sign with eth_signTypedData_v4. */
+export function cosignConvertTypedData(
+  inner: ConvertInnerAction,
+  multiSigUser: Hex,
+  outerSigner: Hex,
+  isMainnet: boolean,
+): UserSignedTypedData {
+  return userSignedTypedData(
+    'HyperliquidTransaction:ConvertToMultiSigUser',
+    addMultiSigSignTypes(CONVERT_TO_MULTI_SIG_USER_TYPES),
+    {
+      hyperliquidChain: isMainnet ? 'Mainnet' : 'Testnet',
+      payloadMultiSigUser: multiSigUser.toLowerCase(),
+      outerSigner: outerSigner.toLowerCase(),
+      signers: inner.signers,
+      nonce: inner.nonce,
     },
   );
 }

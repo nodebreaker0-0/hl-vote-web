@@ -24,12 +24,16 @@ export {
   sendMultiSigTypedData,
   convertToMultiSigUserAction,
   convertTypedData,
+  convertInnerAction,
+  cosignConvertTypedData,
 } from './multisig';
 export type {
   MultiSigEnvelope,
   MultiSigAction,
   ConvertToMultiSigUserAction,
+  ConvertInnerAction,
 } from './multisig';
+export { addMultiSigSignTypes } from './userSigned';
 export {
   submitExchange,
   submitMultiSig,

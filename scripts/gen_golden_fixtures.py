@@ -46,6 +46,8 @@ if SDK_DIR.exists():
 
 from hyperliquid.utils.signing import (  # noqa: E402
     action_hash,
+    add_multi_sig_fields,
+    add_multi_sig_types,
     construct_phantom_agent,
     l1_payload,
     user_signed_payload,
@@ -229,6 +231,73 @@ def gen_multisig() -> list[dict]:
     return rows
 
 
+def gen_multisig_convert() -> list[dict]:
+    """MS-040b — convertToMultiSigUser executed *via* a multiSig (teardown /
+    change signers on an address that is ALREADY a multi-sig).
+
+    Distinct from the validatorL1Vote multisig path: the inner action is itself
+    user-signed, so each cosigner signs with `add_multi_sig_fields` +
+    `add_multi_sig_types` (scheme B, enriched with payloadMultiSigUser /
+    outerSigner), NOT the scheme-A Agent envelope. The outer SendMultiSig is the
+    same scheme-B SendMultiSig as the vote path, but over a convert inner.
+    """
+    rows: list[dict] = []
+    seq = 0
+    # signers="null" → convert back to normal; json → change authorized set.
+    _SIGNERS = ["null", json.dumps({"authorizedUsers": sorted(_AUTHORIZED), "threshold": 1})]
+    for is_mainnet in (False, True):
+        hl = "Mainnet" if is_mainnet else "Testnet"
+        for nonce in _MS_NONCES:
+            for signers in _SIGNERS:
+                # The inner convert action carried inside the multiSig payload.
+                inner = {
+                    "type": "convertToMultiSigUser",
+                    "signatureChainId": "0x66eee",
+                    "hyperliquidChain": hl,
+                    "signers": signers,
+                    "nonce": nonce,
+                }
+
+                # --- cosigner: enriched user-signed over the inner action ---
+                seq += 1
+                envelope = add_multi_sig_fields(inner, _MSU, _OUTER)
+                enriched_types = add_multi_sig_types(CONVERT_TO_MULTI_SIG_USER_SIGN_TYPES)
+                typed = user_signed_payload(
+                    "HyperliquidTransaction:ConvertToMultiSigUser", enriched_types, envelope
+                )
+                dh, mh, sh = signing_hash_from_typed(typed)
+                rows.append({
+                    "label": f"ms-cvt-cosign-{seq:03d}", "kind": "cosignUserConvert",
+                    "is_mainnet": is_mainnet, "nonce": str(nonce),
+                    "multiSigUser": _MSU, "outerSigner": _OUTER, "signers": signers,
+                    "domain_hash": "0x" + dh.hex(), "message_hash": "0x" + mh.hex(),
+                    "signing_hash": "0x" + sh.hex(),
+                })
+
+                # --- outer: SendMultiSig over the convert inner ---
+                seq += 1
+                msa = {
+                    "type": "multiSig", "signatureChainId": "0x66eee", "signatures": _SAMPLE_SIGS,
+                    "payload": {"multiSigUser": _MSU.lower(), "outerSigner": _OUTER.lower(), "action": inner},
+                }
+                without_tag = {k: v for k, v in msa.items() if k != "type"}
+                msah = action_hash(without_tag, None, nonce, None)
+                dh, mh, sh = _user_signed_hashes(
+                    "HyperliquidTransaction:SendMultiSig", MULTI_SIG_ENVELOPE_SIGN_TYPES,
+                    {"multiSigActionHash": msah, "nonce": nonce}, is_mainnet,
+                )
+                rows.append({
+                    "label": f"ms-cvt-send-{seq:03d}", "kind": "sendMultiSigConvert",
+                    "is_mainnet": is_mainnet, "nonce": str(nonce),
+                    "multiSigUser": _MSU, "outerSigner": _OUTER, "signers": signers,
+                    "innerAction": inner, "inner_msgpack_hex": "0x" + msgpack.packb(inner).hex(),
+                    "signatures": _SAMPLE_SIGS, "multi_sig_action_hash": "0x" + msah.hex(),
+                    "domain_hash": "0x" + dh.hex(), "message_hash": "0x" + mh.hex(),
+                    "signing_hash": "0x" + sh.hex(),
+                })
+    return rows
+
+
 def main() -> int:
     out_path = THIS_DIR.parent / "tests" / "golden" / "fixtures.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,7 +309,7 @@ def main() -> int:
     print(f"sha256(payload): {digest}")
 
     ms_path = THIS_DIR.parent / "tests" / "golden" / "multisig-fixtures.json"
-    ms_rows = gen_multisig()
+    ms_rows = gen_multisig() + gen_multisig_convert()
     with ms_path.open("w") as f:
         json.dump(ms_rows, f, indent=2, ensure_ascii=False)
     print(f"wrote {len(ms_rows)} multisig fixtures to {ms_path}")

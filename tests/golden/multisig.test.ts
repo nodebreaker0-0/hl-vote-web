@@ -25,18 +25,22 @@ import {
   sendMultiSigTypedData,
   convertToMultiSigUserAction,
   convertTypedData,
+  convertInnerAction,
+  cosignConvertTypedData,
   userSignedHashes,
 } from '../../lib/signing';
 import type { Hex } from '../../lib/signing/types';
 
 interface MsFixture {
   label: string;
-  kind: 'cosign' | 'sendMultiSig' | 'convert';
+  kind: 'cosign' | 'sendMultiSig' | 'convert' | 'cosignUserConvert' | 'sendMultiSigConvert';
   is_mainnet: boolean;
   nonce: string;
   multiSigUser?: Hex;
   outerSigner?: Hex;
   action?: object;
+  innerAction?: object;
+  inner_msgpack_hex?: Hex;
   envelope_msgpack_hex?: Hex;
   action_hash?: Hex;
   multi_sig_action_hash?: Hex;
@@ -82,10 +86,34 @@ describe.runIf(avail)('multisig golden (Python SDK parity)', () => {
       expect(h.domainHash).toBe(fx.domain_hash);
       expect(h.messageHash).toBe(fx.message_hash);
       expect(h.signingHash).toBe(fx.signing_hash);
-    } else {
+    } else if (fx.kind === 'convert') {
       const act = convertToMultiSigUserAction(fx.authorizedUsers!, fx.threshold!, nonce);
       expect(act.signers).toBe(fx.signers);
       const h = userSignedHashes(convertTypedData(act, fx.is_mainnet));
+      expect(h.domainHash).toBe(fx.domain_hash);
+      expect(h.messageHash).toBe(fx.message_hash);
+      expect(h.signingHash).toBe(fx.signing_hash);
+    } else if (fx.kind === 'cosignUserConvert') {
+      const inner = convertInnerAction(fx.signers!, nonce, fx.is_mainnet);
+      const h = userSignedHashes(
+        cosignConvertTypedData(inner, fx.multiSigUser!, fx.outerSigner!, fx.is_mainnet),
+      );
+      expect(h.domainHash).toBe(fx.domain_hash);
+      expect(h.messageHash).toBe(fx.message_hash);
+      expect(h.signingHash).toBe(fx.signing_hash);
+    } else {
+      // sendMultiSigConvert — outer SendMultiSig over a convert inner.
+      const inner = convertInnerAction(fx.signers!, nonce, fx.is_mainnet);
+      expect(toHex(serialize(inner))).toBe(fx.inner_msgpack_hex);
+      const msa = buildMultiSigAction(
+        fx.multiSigUser!,
+        fx.outerSigner!,
+        inner,
+        fx.signatures ?? [],
+      );
+      const typed = sendMultiSigTypedData(msa, nonce, fx.is_mainnet);
+      expect(typed.message.multiSigActionHash).toBe(fx.multi_sig_action_hash);
+      const h = userSignedHashes(typed);
       expect(h.domainHash).toBe(fx.domain_hash);
       expect(h.messageHash).toBe(fx.message_hash);
       expect(h.signingHash).toBe(fx.signing_hash);
