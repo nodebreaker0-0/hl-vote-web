@@ -8,6 +8,7 @@ import { InputModeSelector, type InputMode } from '@/components/InputModeSelecto
 import { DelistInput } from '@/components/DelistInput';
 import { ActionPasteBox } from '@/components/ActionPasteBox';
 import { ValidationChecklist } from '@/components/ValidationChecklist';
+import { PublisherMatch } from '@/components/PublisherMatch';
 import { parseAction, type ParseResult } from '@/lib/parseAction';
 
 export interface ActionInputProps {
@@ -73,6 +74,7 @@ export function ActionInput({ onResult, pinned }: ActionInputProps) {
             )}
           </p>
         )}
+        <PublisherMatch action={lastResult.ok ? lastResult.action : null} />
       </div>
     </fieldset>
   );
