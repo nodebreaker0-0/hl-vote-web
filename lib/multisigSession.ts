@@ -44,24 +44,21 @@ function lower(addr: string): `0x${string}` {
 }
 
 /**
- * Serialize the request. The `action` is embedded VERBATIM from `actionRaw`
- * (the exact text pasted into the Action input) rather than re-serialized, so
- * the blob never reorders keys and matches what the operator sees upstream
- * (Constitution II — never reformat the action). Falls back to a compact
- * JSON.stringify only if no raw text is available.
+ * Serialize the request as COMPACT JSON (single line, no pretty-printing) and
+ * embed the `action` VERBATIM from `actionRaw` — the exact text from the Action
+ * input — rather than re-serializing it. So the blob is never reformatted or
+ * key-reordered (Constitution II); it looks just like the Action input content.
+ * Falls back to a compact JSON.stringify of the parsed action if no raw text.
  */
 export function serializeRequest(req: MultiSigRequest, actionRaw?: string): string {
   const actionText = (actionRaw ?? JSON.stringify(req.action)).trim();
-  return [
-    '{',
-    `  "v": 1,`,
-    `  "network": ${JSON.stringify(req.network)},`,
-    `  "multiSigUser": ${JSON.stringify(req.multiSigUser)},`,
-    `  "outerSigner": ${JSON.stringify(req.outerSigner)},`,
-    `  "nonce": ${JSON.stringify(req.nonce)},`,
-    `  "action": ${actionText}`,
-    '}',
-  ].join('\n');
+  return (
+    `{"v":1,"network":${JSON.stringify(req.network)},` +
+    `"multiSigUser":${JSON.stringify(req.multiSigUser)},` +
+    `"outerSigner":${JSON.stringify(req.outerSigner)},` +
+    `"nonce":${JSON.stringify(req.nonce)},` +
+    `"action":${actionText}}`
+  );
 }
 
 export function parseRequest(text: string): MultiSigRequest {
