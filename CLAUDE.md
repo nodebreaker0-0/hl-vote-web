@@ -96,3 +96,4 @@ hl-vote-web/
 | 2026-05-24 | Constitution v1.1.0 — VII 제거, V cap ≤10, single wallet path (MetaMask + Ledger import) | ✅ |
 | 2026-05-24 | **mainnet 실 vote 1건 성공** — CHARTER §7 게이트 builnad confirm 통과 | ✅ |
 | 2026-05-25+ | Tier 2 polish (history viewer, friendly summary, release engineering, HF 공유) | ⏳ |
+| 2026-06-01 | mainnet 첫 outcome settle 라운드 분석 → 개선 리스트 `IMPROVEMENTS-2026-06-01.md` (I-1 settleOutcome decode, I-2 outcomeMeta 교차검증, I-3 sanity-check 게이트, I-5 signer-key 추적) | ⏳ |
