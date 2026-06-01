@@ -225,6 +225,12 @@ export default function HomePage() {
 
       <NetworkSelector value={network} onChange={setNetwork} />
 
+      <VoteStatus
+        network={network}
+        selfSigner={wallet?.account ?? null}
+        onPickAction={onPickAction}
+      />
+
       <ActionInput onResult={setParsed} pinned={pinned ?? undefined} />
 
       {action && network && <ActionSummary action={action} network={network} />}
@@ -276,12 +282,6 @@ export default function HomePage() {
       </div>
 
       <ResponseViewer state={resp} />
-
-      <VoteStatus
-        network={network}
-        selfSigner={wallet?.account ?? null}
-        onPickAction={onPickAction}
-      />
 
       {pendingDedup && (
         <DedupModal
