@@ -277,7 +277,7 @@ export default function HomePage() {
         onPickAction={onPickAction}
       />
 
-      <MultiSigPanel wallet={wallet} action={action} network={network} />
+      <MultiSigPanel action={action} network={network} />
 
       {pendingDedup && (
         <DedupModal

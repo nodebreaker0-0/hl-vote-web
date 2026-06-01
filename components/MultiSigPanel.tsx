@@ -16,7 +16,6 @@
 // before any mainnet use.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { WalletState } from './WalletSelector';
 import { ActionSummary } from './ActionSummary';
 import {
   buildMultiSigAction,
@@ -29,8 +28,10 @@ import {
   type Network,
 } from '@/lib/signing';
 import {
+  getActiveAccount,
   signTypedDataMetaMask,
   signUserSignedMetaMask,
+  subscribeAccounts,
   WalletChainError,
   WalletRejectedError,
 } from '@/lib/wallet/metamask';
@@ -48,7 +49,6 @@ import { fetchUserToMultiSigSigners, type MultiSigSigners } from '@/lib/api';
 type Role = 'lead' | 'cosigner';
 
 interface Props {
-  wallet: WalletState | null;
   /** The validatorL1Vote action currently pasted/validated on the main page. */
   action: { type: 'validatorL1Vote'; [k: string]: unknown } | null;
   network: Network | null;
@@ -80,6 +80,29 @@ function CopyBox({ label, text }: { label: string; text: string }) {
   );
 }
 
+/**
+ * The live MetaMask account, updated on `accountsChanged`. Multisig signing must
+ * use whatever account is *currently* selected in MetaMask (cosigners switch
+ * accounts in the extension), NOT the address that happened to be connected on
+ * the main page — passing a stale address to eth_signTypedData_v4 makes MetaMask
+ * prompt for the wrong account.
+ */
+function useActiveAccount(): `0x${string}` | null {
+  const [account, setAccount] = useState<`0x${string}` | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getActiveAccount().then((a) => {
+      if (!cancelled) setAccount(a);
+    });
+    const unsub = subscribeAccounts((a) => setAccount(a));
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+  return account;
+}
+
 function errText(e: unknown): string {
   if (e instanceof WalletRejectedError || e instanceof WalletChainError) return e.message;
   if (e instanceof SubmitNetworkError) return `Network error: ${e.message}`;
@@ -87,7 +110,7 @@ function errText(e: unknown): string {
   return (e as Error).message ?? String(e);
 }
 
-export function MultiSigPanel({ wallet, action, network }: Props) {
+export function MultiSigPanel({ action, network }: Props) {
   const [role, setRole] = useState<Role>('lead');
 
   return (
@@ -120,9 +143,9 @@ export function MultiSigPanel({ wallet, action, network }: Props) {
         </div>
 
         {role === 'lead' ? (
-          <LeadView wallet={wallet} action={action} network={network} />
+          <LeadView action={action} network={network} />
         ) : (
-          <CosignerView wallet={wallet} />
+          <CosignerView />
         )}
       </div>
     </details>
@@ -131,7 +154,7 @@ export function MultiSigPanel({ wallet, action, network }: Props) {
 
 // ---- Lead ---------------------------------------------------------------
 
-function LeadView({ wallet, action, network }: Props) {
+function LeadView({ action, network }: Props) {
   const [multiSigUser, setMultiSigUser] = useState('');
   const [nonce, setNonce] = useState<string | null>(null);
   const [signers, setSigners] = useState<MultiSigSigners | null | 'loading' | 'error'>(null);
@@ -141,8 +164,12 @@ function LeadView({ wallet, action, network }: Props) {
     null,
   );
 
+  const activeAccount = useActiveAccount();
   const msuValid = isAddress(multiSigUser);
-  const outerSigner = wallet ? (wallet.account.toLowerCase() as `0x${string}`) : null;
+  // Lead signs the OUTER envelope, so the session's outerSigner tracks the live
+  // MetaMask account. Switching accounts changes outerSigner → the request (and
+  // thus what cosigners must sign) changes too.
+  const outerSigner = activeAccount ? (activeAccount.toLowerCase() as `0x${string}`) : null;
 
   // MS-031 — resolve the multisig's authorized signers + threshold.
   useEffect(() => {
@@ -206,27 +233,37 @@ function LeadView({ wallet, action, network }: Props) {
   const enough = threshold !== null && acceptedCosigs.length >= threshold;
 
   const addMyCosig = useCallback(async () => {
-    if (!request || !wallet || !outerSigner) return;
+    if (!request) return;
     setBusy(true);
     setResult(null);
     try {
+      const signer = await getActiveAccount();
+      if (!signer) throw new Error('Connect MetaMask first.');
       const env = multiSigEnvelope(request.multiSigUser, request.outerSigner, request.action);
       const typed = cosignTypedData(env, BigInt(request.nonce), request.network === 'mainnet');
-      const sig = await signTypedDataMetaMask(wallet.account, typed);
-      const line = serializeCosig({ signer: outerSigner, ...sig });
+      const sig = await signTypedDataMetaMask(signer, typed);
+      const line = serializeCosig({ signer: signer.toLowerCase() as `0x${string}`, ...sig });
       setCosigText((t) => (t.trim() ? `${t.trim()}\n${line}` : line));
     } catch (e) {
       setResult({ kind: 'err', msg: errText(e) });
     } finally {
       setBusy(false);
     }
-  }, [request, wallet, outerSigner]);
+  }, [request]);
 
   const signAndSubmit = useCallback(async () => {
-    if (!request || !wallet || !enough) return;
+    if (!request || !enough) return;
     setBusy(true);
     setResult(null);
     try {
+      const signer = await getActiveAccount();
+      if (!signer) throw new Error('Connect MetaMask first.');
+      if (signer.toLowerCase() !== request.outerSigner) {
+        throw new Error(
+          `Active MetaMask account (${signer.toLowerCase()}) is not the session's outer signer ` +
+            `(${request.outerSigner}). Switch back to it, or set a new nonce and reshare.`,
+        );
+      }
       const signatures = acceptedCosigs.map((c) => ({ r: c.r, s: c.s, v: c.v }));
       const msa = buildMultiSigAction(
         request.multiSigUser,
@@ -236,7 +273,7 @@ function LeadView({ wallet, action, network }: Props) {
       );
       const nonceBig = BigInt(request.nonce);
       const typed = sendMultiSigTypedData(msa, nonceBig, request.network === 'mainnet');
-      const outerSig = await signUserSignedMetaMask(wallet.account, typed);
+      const outerSig = await signUserSignedMetaMask(signer, typed);
       const response = await submitMultiSig({
         network: request.network,
         action: msa,
@@ -249,7 +286,7 @@ function LeadView({ wallet, action, network }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [request, wallet, enough, acceptedCosigs]);
+  }, [request, enough, acceptedCosigs]);
 
   return (
     <div className="space-y-4">
@@ -257,6 +294,14 @@ function LeadView({ wallet, action, network }: Props) {
         <p className="text-xs text-mainnet">
           Choose a network and paste a valid validatorL1Vote action on the main page first — the lead
           reuses it.
+        </p>
+      )}
+      {!activeAccount && (
+        <p className="text-xs text-mainnet">Connect MetaMask on the main page first.</p>
+      )}
+      {activeAccount && (
+        <p className="mono text-[11px] text-hl-subtle">
+          outer signer (active account): {activeAccount.toLowerCase()}
         </p>
       )}
 
@@ -294,10 +339,10 @@ function LeadView({ wallet, action, network }: Props) {
                   </li>
                 ))}
               </ul>
-              {wallet && !leadAuthorized && (
+              {activeAccount && !leadAuthorized && (
                 <p className="text-mainnet">
-                  Your wallet ({outerSigner}) is not an authorized signer — the outer submit will be
-                  rejected.
+                  Your active account ({outerSigner}) is not an authorized signer — the outer submit
+                  will be rejected.
                 </p>
               )}
             </div>
@@ -330,7 +375,7 @@ function LeadView({ wallet, action, network }: Props) {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs text-hl-subtle">② Paste cosigner signatures (one per line or a JSON array)</span>
-            {wallet && leadAuthorized && (
+            {activeAccount && leadAuthorized && (
               <button
                 type="button"
                 disabled={busy}
@@ -364,7 +409,7 @@ function LeadView({ wallet, action, network }: Props) {
 
       <button
         type="button"
-        disabled={!request || !wallet || !enough || busy}
+        disabled={!request || !enough || busy}
         onClick={() => void signAndSubmit()}
         className="w-full rounded bg-hl-mint px-4 py-3 text-sm font-semibold text-hl-bg transition-opacity hover:bg-hl-mint-dim disabled:cursor-not-allowed disabled:opacity-40"
       >
@@ -385,7 +430,8 @@ function LeadView({ wallet, action, network }: Props) {
 
 // ---- Cosigner -----------------------------------------------------------
 
-function CosignerView({ wallet }: { wallet: WalletState | null }) {
+function CosignerView() {
+  const activeAccount = useActiveAccount();
   const [reqText, setReqText] = useState('');
   const [busy, setBusy] = useState(false);
   const [mySig, setMySig] = useState<string | null>(null);
@@ -402,21 +448,25 @@ function CosignerView({ wallet }: { wallet: WalletState | null }) {
 
   const sign = useCallback(async () => {
     const req = parsed.req;
-    if (!req || !wallet) return;
+    if (!req) return;
     setBusy(true);
     setErr(null);
     setMySig(null);
     try {
+      // Read the account fresh: cosigners typically switch to their authorized
+      // account in MetaMask right before signing.
+      const signer = await getActiveAccount();
+      if (!signer) throw new Error('Connect MetaMask first.');
       const env = multiSigEnvelope(req.multiSigUser, req.outerSigner, req.action);
       const typed = cosignTypedData(env, BigInt(req.nonce), req.network === 'mainnet');
-      const sig = await signTypedDataMetaMask(wallet.account, typed);
-      setMySig(serializeCosig({ signer: wallet.account.toLowerCase() as `0x${string}`, ...sig }));
+      const sig = await signTypedDataMetaMask(signer, typed);
+      setMySig(serializeCosig({ signer: signer.toLowerCase() as `0x${string}`, ...sig }));
     } catch (e) {
       setErr(errText(e));
     } finally {
       setBusy(false);
     }
-  }, [parsed.req, wallet]);
+  }, [parsed.req]);
 
   return (
     <div className="space-y-4">
@@ -443,15 +493,22 @@ function CosignerView({ wallet }: { wallet: WalletState | null }) {
 
       {parsed.req && <ActionSummary action={parsed.req.action} network={parsed.req.network} />}
 
+      {activeAccount ? (
+        <p className="mono text-[11px] text-hl-subtle">
+          signing as {activeAccount.toLowerCase()} — switch account in MetaMask to change
+        </p>
+      ) : (
+        <p className="text-xs text-hl-subtle">Connect MetaMask on the main page first.</p>
+      )}
+
       <button
         type="button"
-        disabled={!parsed.req || !wallet || busy}
+        disabled={!parsed.req || !activeAccount || busy}
         onClick={() => void sign()}
         className="w-full rounded bg-hl-mint px-4 py-3 text-sm font-semibold text-hl-bg transition-opacity hover:bg-hl-mint-dim disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? 'Waiting for signature…' : '② Sign inner action as cosigner'}
       </button>
-      {!wallet && <p className="text-center text-xs text-hl-subtle">Connect a wallet on the main page first.</p>}
       {err && (
         <pre className="mono whitespace-pre-wrap rounded border border-mainnet bg-mainnet/10 p-2 text-xs text-mainnet">
           {err}

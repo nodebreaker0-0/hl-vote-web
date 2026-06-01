@@ -11,6 +11,8 @@ import { fromHex } from '@/lib/signing';
 interface Eip1193Provider {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   isMetaMask?: boolean;
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
 }
 
 function getProvider(): Eip1193Provider | null {
@@ -201,6 +203,34 @@ export async function signUserSignedMetaMask(
     throw e;
   }
   return splitSignature(sigHex);
+}
+
+/**
+ * The account currently selected in MetaMask (eth_accounts[0]). This is the
+ * account MetaMask will actually sign with, and it changes when the user
+ * switches accounts in the extension — so signing flows must read it fresh at
+ * sign time rather than trusting a previously-stored address. Returns null if
+ * no provider or nothing connected.
+ */
+export async function getActiveAccount(): Promise<`0x${string}` | null> {
+  const p = getProvider();
+  if (!p) return null;
+  const accounts = (await p.request({ method: 'eth_accounts' })) as string[];
+  const a = accounts[0];
+  return typeof a === 'string' && a.startsWith('0x') ? (a as `0x${string}`) : null;
+}
+
+/** Subscribe to MetaMask account switches. Returns an unsubscribe fn. */
+export function subscribeAccounts(cb: (account: `0x${string}` | null) => void): () => void {
+  const p = getProvider();
+  if (!p?.on || !p.removeListener) return () => {};
+  const handler = (...args: unknown[]) => {
+    const accounts = args[0] as string[] | undefined;
+    const a = accounts?.[0];
+    cb(typeof a === 'string' && a.startsWith('0x') ? (a as `0x${string}`) : null);
+  };
+  p.on('accountsChanged', handler);
+  return () => p.removeListener?.('accountsChanged', handler);
 }
 
 /** Returns the wallet's currently active chain id as a decimal number. */
