@@ -15,6 +15,7 @@ import { WalletSelector, type WalletState } from '@/components/WalletSelector';
 import { ResponseViewer } from '@/components/ResponseViewer';
 import { DedupModal } from '@/components/DedupModal';
 import { VoteStatus } from '@/components/VoteStatus';
+import { MultiSigPanel } from '@/components/MultiSigPanel';
 import {
   actionHash,
   l1Payload,
@@ -275,6 +276,8 @@ export default function HomePage() {
         selfSigner={wallet?.account ?? null}
         onPickAction={onPickAction}
       />
+
+      <MultiSigPanel wallet={wallet} action={action} network={network} />
 
       {pendingDedup && (
         <DedupModal

@@ -24,19 +24,42 @@ export class SubmitHttpError extends Error {
 }
 
 export async function submitExchange(args: SubmitArgs): Promise<unknown> {
-  if (args.network === 'mainnet' && process.env.NEXT_PUBLIC_MAINNET_ENABLED !== 'true') {
-    // Defense in depth — UI already disables this, but trip again here.
-    throw new Error('mainnet not enabled in this build');
-  }
-  const url = args.network === 'mainnet' ? MAINNET_URL : TESTNET_URL;
-
-  const body: ExchangePayload = {
+  return postExchange(args.network, {
     action: args.action,
     nonce: Number(args.nonce),
     signature: args.signature,
     vaultAddress: null,
     expiresAfter: null,
-  };
+  });
+}
+
+/** Submit a multi-sig action (`{type:"multiSig", ...}`) signed by the outer signer. */
+export interface SubmitMultiSigArgs {
+  network: Network;
+  /** The full `{type:"multiSig", signatureChainId, signatures, payload}` object. */
+  action: object;
+  /** Shared nonce — identical to the one all cosigners + the outer signer used. */
+  nonce: bigint;
+  /** Outer signer's `SendMultiSig` (scheme B) signature. */
+  signature: SignatureRSV;
+}
+
+export async function submitMultiSig(args: SubmitMultiSigArgs): Promise<unknown> {
+  return postExchange(args.network, {
+    action: args.action,
+    nonce: Number(args.nonce),
+    signature: args.signature,
+    vaultAddress: null,
+    expiresAfter: null,
+  });
+}
+
+async function postExchange(network: Network, body: ExchangePayload): Promise<unknown> {
+  if (network === 'mainnet' && process.env.NEXT_PUBLIC_MAINNET_ENABLED !== 'true') {
+    // Defense in depth — UI already disables this, but trip again here.
+    throw new Error('mainnet not enabled in this build');
+  }
+  const url = network === 'mainnet' ? MAINNET_URL : TESTNET_URL;
 
   let res: Response;
   try {

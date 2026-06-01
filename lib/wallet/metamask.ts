@@ -5,7 +5,7 @@
 // bundle past Constitution V budget; the manual path is ~30 lines and gives
 // exact control over the JSON sent to MetaMask.
 
-import type { L1TypedData, SignatureRSV } from '@/lib/signing';
+import type { L1TypedData, SignatureRSV, UserSignedTypedData } from '@/lib/signing';
 import { fromHex } from '@/lib/signing';
 
 interface Eip1193Provider {
@@ -115,6 +115,92 @@ export async function ensureHLPhantomChain(): Promise<void> {
       params: [{ chainId: '0x539' }],
     });
   }
+}
+
+// ---- Scheme B (user-signed) chain ---------------------------------------
+//
+// Multisig SendMultiSig / ConvertToMultiSigUser are *user-signed* actions:
+// their EIP-712 domain.chainId is fixed at int("0x66eee") = 421614 (the SDK
+// hardcodes signatureChainId="0x66eee"). HF recovers the signer using that
+// domain.chainId, so it must be exactly 421614 for BOTH HL mainnet and testnet
+// — the hyperliquidChain field ("Mainnet"/"Testnet"), not the chainId,
+// distinguishes the network. MetaMask v11+ enforces domain.chainId == active
+// chainId, so the wallet must sit on 0x66eee (Arbitrum Sepolia) while signing.
+const HL_USER_SIGNED_CHAIN = {
+  chainId: '0x66eee', // 421614
+  chainName: 'Arbitrum Sepolia',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
+  blockExplorerUrls: ['https://sepolia.arbiscan.io'],
+};
+
+export async function ensureUserSignedChain(): Promise<void> {
+  const p = getProvider();
+  if (!p) throw new WalletNotFoundError();
+
+  const currentHex = (await p.request({ method: 'eth_chainId' })) as string;
+  if (currentHex === '0x66eee') return;
+
+  try {
+    await p.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x66eee' }],
+    });
+    return;
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    if (code !== 4902 && code !== -32603) {
+      if (code === 4001) throw new WalletRejectedError('User rejected chain switch.');
+      throw e;
+    }
+  }
+
+  try {
+    await p.request({
+      method: 'wallet_addEthereumChain',
+      params: [HL_USER_SIGNED_CHAIN],
+    });
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    if (code === 4001) throw new WalletRejectedError('User rejected adding the signer chain.');
+    throw new WalletChainError(
+      `Failed to add the user-signed chain (Arbitrum Sepolia, 421614): ${(e as Error).message}. ` +
+        `Add it manually in MetaMask: chainId=421614, RPC https://sepolia-rollup.arbitrum.io/rpc.`,
+    );
+  }
+
+  const afterHex = (await p.request({ method: 'eth_chainId' })) as string;
+  if (afterHex !== '0x66eee') {
+    await p.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x66eee' }],
+    });
+  }
+}
+
+/** Sign a user-signed (scheme B) typed-data — switches to 0x66eee first. */
+export async function signUserSignedMetaMask(
+  account: `0x${string}`,
+  typed: UserSignedTypedData,
+): Promise<SignatureRSV> {
+  const p = getProvider();
+  if (!p) throw new WalletNotFoundError();
+
+  await ensureUserSignedChain();
+
+  const payload = JSON.stringify(typed);
+  let sigHex: string;
+  try {
+    sigHex = (await p.request({
+      method: 'eth_signTypedData_v4',
+      params: [account, payload],
+    })) as string;
+  } catch (e) {
+    const code = (e as { code?: number }).code;
+    if (code === 4001) throw new WalletRejectedError('User rejected the signature.');
+    throw e;
+  }
+  return splitSignature(sigHex);
 }
 
 /** Returns the wallet's currently active chain id as a decimal number. */
