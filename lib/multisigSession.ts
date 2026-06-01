@@ -43,8 +43,25 @@ function lower(addr: string): `0x${string}` {
   return addr.toLowerCase() as `0x${string}`;
 }
 
-export function serializeRequest(req: MultiSigRequest): string {
-  return JSON.stringify(req, null, 2);
+/**
+ * Serialize the request. The `action` is embedded VERBATIM from `actionRaw`
+ * (the exact text pasted into the Action input) rather than re-serialized, so
+ * the blob never reorders keys and matches what the operator sees upstream
+ * (Constitution II — never reformat the action). Falls back to a compact
+ * JSON.stringify only if no raw text is available.
+ */
+export function serializeRequest(req: MultiSigRequest, actionRaw?: string): string {
+  const actionText = (actionRaw ?? JSON.stringify(req.action)).trim();
+  return [
+    '{',
+    `  "v": 1,`,
+    `  "network": ${JSON.stringify(req.network)},`,
+    `  "multiSigUser": ${JSON.stringify(req.multiSigUser)},`,
+    `  "outerSigner": ${JSON.stringify(req.outerSigner)},`,
+    `  "nonce": ${JSON.stringify(req.nonce)},`,
+    `  "action": ${actionText}`,
+    '}',
+  ].join('\n');
 }
 
 export function parseRequest(text: string): MultiSigRequest {

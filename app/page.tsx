@@ -239,7 +239,11 @@ export default function HomePage() {
 
       <WalletSelector value={wallet} onChange={setWallet} />
 
-      <MultiSigPanel action={action} network={network} />
+      <MultiSigPanel
+        action={action}
+        actionRaw={parsed?.ok ? parsed.raw : null}
+        network={network}
+      />
 
       {action && network && (
         <SanityChecklist

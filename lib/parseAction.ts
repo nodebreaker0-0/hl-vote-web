@@ -37,6 +37,9 @@ function freshChecks(): ValidationChecks {
 export interface ParseSuccess {
   ok: true;
   action: ValidatorL1VoteAction;
+  /** The verbatim JSON slice that was parsed (no reformatting) — for carrying
+   *  the action through to other surfaces (e.g. the multisig request blob). */
+  raw: string;
   variant: ActionVariant;
   innerKey: string | null; // the non-"type" key present (`O`, `D`, ...)
   checks: ValidationChecks;
@@ -178,6 +181,7 @@ export function parseAction(raw: string): ParseResult {
   return {
     ok: true,
     action: obj as ValidatorL1VoteAction,
+    raw: sliced,
     variant,
     innerKey,
     checks,

@@ -51,6 +51,8 @@ type Role = 'lead' | 'cosigner';
 interface Props {
   /** The validatorL1Vote action currently pasted/validated on the main page. */
   action: { type: 'validatorL1Vote'; [k: string]: unknown } | null;
+  /** Verbatim pasted JSON for that action — embedded as-is in the request blob. */
+  actionRaw?: string | null;
   network: Network | null;
 }
 
@@ -110,7 +112,7 @@ function errText(e: unknown): string {
   return (e as Error).message ?? String(e);
 }
 
-export function MultiSigPanel({ action, network }: Props) {
+export function MultiSigPanel({ action, actionRaw, network }: Props) {
   const [role, setRole] = useState<Role>('lead');
 
   return (
@@ -143,7 +145,7 @@ export function MultiSigPanel({ action, network }: Props) {
         </div>
 
         {role === 'lead' ? (
-          <LeadView action={action} network={network} />
+          <LeadView action={action} actionRaw={actionRaw} network={network} />
         ) : (
           <CosignerView />
         )}
@@ -154,7 +156,7 @@ export function MultiSigPanel({ action, network }: Props) {
 
 // ---- Lead ---------------------------------------------------------------
 
-function LeadView({ action, network }: Props) {
+function LeadView({ action, actionRaw, network }: Props) {
   const [multiSigUser, setMultiSigUser] = useState('');
   const [nonce, setNonce] = useState<string | null>(null);
   const [signers, setSigners] = useState<MultiSigSigners | null | 'loading' | 'error'>(null);
@@ -367,7 +369,7 @@ function LeadView({ action, network }: Props) {
       {request && (
         <CopyBox
           label="① Send this request to every cosigner"
-          text={serializeRequest(request)}
+          text={serializeRequest(request, actionRaw ?? undefined)}
         />
       )}
 
