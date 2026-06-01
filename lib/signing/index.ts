@@ -9,5 +9,26 @@ export { phantomAgent } from './phantomAgent';
 export { l1Payload } from './l1Payload';
 export { typedDataHashes } from './typedDataHashes';
 export type { TypedDataHashes } from './typedDataHashes';
+export {
+  userSignedTypedData,
+  userSignedHashes,
+  SEND_MULTI_SIG_TYPES,
+  CONVERT_TO_MULTI_SIG_USER_TYPES,
+  SIGNATURE_CHAIN_ID,
+} from './userSigned';
+export type { UserSignedTypedData, Eip712Field } from './userSigned';
+export {
+  multiSigEnvelope,
+  cosignTypedData,
+  buildMultiSigAction,
+  sendMultiSigTypedData,
+  convertToMultiSigUserAction,
+  convertTypedData,
+} from './multisig';
+export type {
+  MultiSigEnvelope,
+  MultiSigAction,
+  ConvertToMultiSigUserAction,
+} from './multisig';
 export { submitExchange, SubmitNetworkError, SubmitHttpError } from './submit';
 export type { SubmitArgs } from './submit';

@@ -37,7 +37,10 @@ verify-golden:
 	@if [ ! -f tests/golden/fixtures.json ]; then \
 		echo "tests/golden/fixtures.json missing — run 'make golden-gen' first"; exit 1; \
 	fi
-	npm run test -- --run tests/golden/golden.test.ts
+	@if [ ! -f tests/golden/multisig-fixtures.json ]; then \
+		echo "tests/golden/multisig-fixtures.json missing — run 'make golden-gen' first"; exit 1; \
+	fi
+	npm run test -- --run tests/golden/golden.test.ts tests/golden/multisig.test.ts
 
 # ----- build -----
 build:

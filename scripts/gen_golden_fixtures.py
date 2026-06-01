@@ -48,6 +48,9 @@ from hyperliquid.utils.signing import (  # noqa: E402
     action_hash,
     construct_phantom_agent,
     l1_payload,
+    user_signed_payload,
+    MULTI_SIG_ENVELOPE_SIGN_TYPES,
+    CONVERT_TO_MULTI_SIG_USER_SIGN_TYPES,
 )
 
 
@@ -151,6 +154,81 @@ def gen() -> list[dict]:
     return rows
 
 
+# --- G-2 multi-sig fixtures (scheme A cosign + scheme B SendMultiSig/Convert) ---
+
+_MSU = "0x0000000000000000000000000000000000000005"
+_OUTER = "0x176c00000000000000000000000000000000dcab"
+_MS_INNER = [
+    {"type": "validatorL1Vote", "D": "BTC"},
+    {"type": "validatorL1Vote", "O": {"settleOutcome": {"outcome": 110, "settleFraction": "1", "details": "PSG"}}},
+]
+_MS_NONCES = [1, 1_780_000_000_000]
+_SAMPLE_SIGS = [{"r": "0x" + "11" * 32, "s": "0x" + "22" * 32, "v": 27}]
+_AUTHORIZED = [
+    "0x000000000000000000000000000000000000000a",
+    "0x0000000000000000000000000000000000000003",
+]
+
+
+def _user_signed_hashes(primary_type, sign_types, message, is_mainnet):
+    msg = dict(message)
+    msg["signatureChainId"] = "0x66eee"
+    msg["hyperliquidChain"] = "Mainnet" if is_mainnet else "Testnet"
+    typed = user_signed_payload(primary_type, sign_types, msg)
+    return signing_hash_from_typed(typed)
+
+
+def gen_multisig() -> list[dict]:
+    rows: list[dict] = []
+    seq = 0
+    for is_mainnet in (False, True):
+        for nonce in _MS_NONCES:
+            # cosign — scheme A (Agent / chainId 1337) over the [msu, outer, action] envelope
+            for inner in _MS_INNER:
+                seq += 1
+                envelope = [_MSU.lower(), _OUTER.lower(), inner]
+                digest = action_hash(envelope, None, nonce, None)
+                dh, mh, sh = signing_hash_from_typed(l1_payload(construct_phantom_agent(digest, is_mainnet)))
+                rows.append({
+                    "label": f"ms-cosign-{seq:03d}", "kind": "cosign", "is_mainnet": is_mainnet,
+                    "nonce": str(nonce), "multiSigUser": _MSU, "outerSigner": _OUTER, "action": inner,
+                    "envelope_msgpack_hex": "0x" + msgpack.packb(envelope).hex(),
+                    "action_hash": "0x" + digest.hex(),
+                    "domain_hash": "0x" + dh.hex(), "message_hash": "0x" + mh.hex(), "signing_hash": "0x" + sh.hex(),
+                })
+            # SendMultiSig — scheme B (user-signed) over the multiSig action
+            seq += 1
+            msa = {
+                "type": "multiSig", "signatureChainId": "0x66eee", "signatures": _SAMPLE_SIGS,
+                "payload": {"multiSigUser": _MSU.lower(), "outerSigner": _OUTER.lower(), "action": _MS_INNER[0]},
+            }
+            without_tag = {k: v for k, v in msa.items() if k != "type"}
+            msah = action_hash(without_tag, None, nonce, None)
+            dh, mh, sh = _user_signed_hashes(
+                "HyperliquidTransaction:SendMultiSig", MULTI_SIG_ENVELOPE_SIGN_TYPES,
+                {"multiSigActionHash": msah, "nonce": nonce}, is_mainnet,
+            )
+            rows.append({
+                "label": f"ms-send-{seq:03d}", "kind": "sendMultiSig", "is_mainnet": is_mainnet,
+                "nonce": str(nonce), "multiSigUser": _MSU, "outerSigner": _OUTER, "action": _MS_INNER[0],
+                "signatures": _SAMPLE_SIGS, "multi_sig_action_hash": "0x" + msah.hex(),
+                "domain_hash": "0x" + dh.hex(), "message_hash": "0x" + mh.hex(), "signing_hash": "0x" + sh.hex(),
+            })
+            # ConvertToMultiSigUser — scheme B
+            seq += 1
+            signers_json = json.dumps({"authorizedUsers": sorted(_AUTHORIZED), "threshold": 2})
+            dh, mh, sh = _user_signed_hashes(
+                "HyperliquidTransaction:ConvertToMultiSigUser", CONVERT_TO_MULTI_SIG_USER_SIGN_TYPES,
+                {"signers": signers_json, "nonce": nonce}, is_mainnet,
+            )
+            rows.append({
+                "label": f"ms-convert-{seq:03d}", "kind": "convert", "is_mainnet": is_mainnet,
+                "nonce": str(nonce), "authorizedUsers": _AUTHORIZED, "threshold": 2, "signers": signers_json,
+                "domain_hash": "0x" + dh.hex(), "message_hash": "0x" + mh.hex(), "signing_hash": "0x" + sh.hex(),
+            })
+    return rows
+
+
 def main() -> int:
     out_path = THIS_DIR.parent / "tests" / "golden" / "fixtures.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,9 +236,14 @@ def main() -> int:
     with out_path.open("w") as f:
         json.dump(rows, f, indent=2, ensure_ascii=False)
     print(f"wrote {len(rows)} fixtures to {out_path}")
-    # checksum for traceability
     digest = hashlib.sha256(json.dumps(rows, sort_keys=False).encode("utf-8")).hexdigest()
     print(f"sha256(payload): {digest}")
+
+    ms_path = THIS_DIR.parent / "tests" / "golden" / "multisig-fixtures.json"
+    ms_rows = gen_multisig()
+    with ms_path.open("w") as f:
+        json.dump(ms_rows, f, indent=2, ensure_ascii=False)
+    print(f"wrote {len(ms_rows)} multisig fixtures to {ms_path}")
     return 0
 
 

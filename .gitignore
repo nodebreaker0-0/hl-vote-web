@@ -10,6 +10,7 @@ coverage/
 .vscode/
 .idea/
 tests/golden/fixtures.json
+tests/golden/multisig-fixtures.json
 dist/
 *.tsbuildinfo
 .venv/

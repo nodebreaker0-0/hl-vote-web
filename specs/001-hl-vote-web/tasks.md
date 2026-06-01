@@ -158,3 +158,28 @@ Phase 1 / Phase 2 의 T010~T014 / T020 / Phase 3 의 T030~T034 등이 자연 단
 - `lib/signing/*` — 100% line + golden 100/100.
 - `lib/history.ts` — 95%+.
 - 컴포넌트 — Tier 0 의 guard 컴포넌트 (NetworkSelector / ActionPasteBox / DedupModal) 의 핵심 케이스 unit.
+
+---
+
+## Phase MS — Multi-sig validatorL1Vote signing (G-2)
+
+> Slashing-grade. `contracts/multisig-signing.md` 가 byte-exact 스펙.
+> **GOLDEN FIRST**: MS-020(golden parity) green 전엔 UI/submit 배선 금지.
+
+- [ ] **MS-001** [P] `scripts/gen_golden_fixtures.py` — multisig 픽스처 추가: L1 envelope
+      (`[multiSigUser,outerSigner,action]` → actionHash + Agent hashes), multiSig action
+      (multiSigActionHash + SendMultiSig user-signed hashes), convertToMultiSigUser
+      (ConvertToMultiSigUser hashes). 별도 `tests/golden/multisig-fixtures.json`.
+- [ ] **MS-002** `lib/signing/userSigned.ts` — `userSignedPayload` (domain
+      `HyperliquidSignTransaction`, chainId 0x66eee) + SIGN_TYPES 상수. typedDataHashes 재사용.
+- [ ] **MS-003** `lib/signing/multisig.ts` — multiSigEnvelope / cosignTypedData(L1 재사용) /
+      buildMultiSigAction / sendMultiSigTypedData / convertToMultiSigUserAction.
+- [ ] **MS-004** `lib/api.ts` — `fetchUserToMultiSigSigners(network, user)`.
+- [ ] **MS-020** `tests/golden/multisig.test.ts` — MS-001 전 row TS==SDK byte-exact. **GATE.**
+- [ ] **MS-005** [P] unit tests (multisig.ts / userSigned.ts).
+- [ ] **MS-030** UI — multiSigUser + transaction-lead 입력, "Sign as cosigner"(sig 문자열
+      생성), threshold까지 paste 수집, "Submit as lead". (D1=paste.)
+- [ ] **MS-031** userToMultiSigSigners 조회·표시 + outerSigner ∈ authorizedUsers 가드.
+- [ ] **MS-040** (follow-up) convertToMultiSigUser setup/teardown. (D2: v1 제외.)
+
+**Checkpoint MS**: MS-020 golden green → UI. testnet multisig vote 1건 성공.

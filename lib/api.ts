@@ -103,3 +103,18 @@ export interface OutcomeMeta {
 export async function fetchOutcomeMeta(n: Network): Promise<OutcomeMeta> {
   return postInfo<OutcomeMeta>(n, { type: 'outcomeMeta' });
 }
+
+// ---- userToMultiSigSigners (G-2) ----------------------------------------
+// Authorized signers + threshold of a multi-sig user. null = not a multisig user.
+
+export interface MultiSigSigners {
+  authorizedUsers: `0x${string}`[];
+  threshold: number;
+}
+
+export async function fetchUserToMultiSigSigners(
+  n: Network,
+  user: string,
+): Promise<MultiSigSigners | null> {
+  return postInfo<MultiSigSigners | null>(n, { type: 'userToMultiSigSigners', user });
+}
