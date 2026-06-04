@@ -79,14 +79,17 @@ export function splitVoters(
 }
 
 /**
- * Given the operator's connected wallet account (a *signer* hex), find the
- * corresponding validator's *governance* address — that is what will land in
- * votes[] after the operator's sign succeeds.
+ * Given the operator's connected wallet account, find the corresponding
+ * validator's *governance* address — that is what lands in votes[] after a
+ * successful sign. On mainnet validator ≠ signer (e.g. B-Harvest validator
+ * 0x1545… / signer 0x21d5…), and the operator may connect with EITHER the
+ * signer key OR the governance address, so we resolve via both fields. (On
+ * testnet they're often the same address, which masked the signer-only lookup.)
  */
 export function governanceForSignerAccount(
   idx: ValidatorIndex,
-  signerAccount: string,
+  account: string,
 ): `0x${string}` | null {
-  const v = idx.bySigner.get(signerAccount.toLowerCase());
+  const v = lookupValidator(idx, account);
   return v ? (v.validator as `0x${string}`) : null;
 }
