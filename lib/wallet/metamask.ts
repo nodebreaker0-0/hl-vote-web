@@ -7,6 +7,7 @@
 
 import type { L1TypedData, SignatureRSV, UserSignedTypedData } from '@/lib/signing';
 import { fromHex } from '@/lib/signing';
+import { MAINNET_ENABLED } from '@/lib/env';
 
 interface Eip1193Provider {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
@@ -79,9 +80,11 @@ const HL_PHANTOM_CHAIN = {
   chainId: '0x539', // 1337
   chainName: 'EIP712signer',
   nativeCurrency: { name: 'Temp', symbol: 'TMP', decimals: 18 },
-  // MetaMask requires at least one rpcUrls entry. This URL never receives
-  // JSON-RPC traffic from us; we only use this chain for typed-data signing.
-  rpcUrls: ['https://api.hyperliquid-testnet.xyz'],
+  // MetaMask requires at least one rpcUrls entry. This URL never receives any
+  // JSON-RPC traffic — the 1337 chain is signer-only. We pick it to MATCH the
+  // build's network so the "add network" prompt never shows a testnet URL on a
+  // mainnet build (which is just confusing, even though it's an inert dummy).
+  rpcUrls: [MAINNET_ENABLED ? 'https://api.hyperliquid.xyz' : 'https://api.hyperliquid-testnet.xyz'],
   blockExplorerUrls: [],
 };
 
