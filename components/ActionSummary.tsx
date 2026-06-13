@@ -8,7 +8,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { fetchOutcomeMeta, type OutcomeMeta } from '@/lib/api';
-import { cacheOutcomes, getCachedOutcomes } from '@/lib/outcomeMetaCache';
+import {
+  cacheOutcomes,
+  getCachedOutcomes,
+  cacheQuestions,
+  getCachedQuestions,
+} from '@/lib/outcomeMetaCache';
 import { decodeAction } from '@/lib/decode';
 import type { Network, ValidatorL1VoteAction } from '@/lib/signing';
 
@@ -27,7 +32,9 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
     setMetaErr(null);
     fetchOutcomeMeta(network)
       .then((m) => {
-        cacheOutcomes(m.outcomes ?? []); // keep names resolvable after HF drops settled outcomes
+        // keep names resolvable after HF drops settled outcomes / questions
+        cacheOutcomes(m.outcomes ?? []);
+        cacheQuestions(m.questions ?? []);
         if (!cancelled) setMeta(m);
       })
       .catch((e) => {
@@ -43,12 +50,15 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
   // shows "NOT FOUND" (no DB; intentional).
   const effectiveMeta = useMemo<OutcomeMeta | null>(() => {
     const cached = getCachedOutcomes();
-    if (!meta && cached.length === 0) return null;
+    const cachedQ = getCachedQuestions();
+    if (!meta && cached.length === 0 && cachedQ.length === 0) return null;
     const live = meta?.outcomes ?? [];
     const liveIds = new Set(live.map((o) => o.outcome));
+    const liveQ = meta?.questions ?? [];
+    const liveQIds = new Set(liveQ.map((q) => q.question));
     return {
       outcomes: [...live, ...cached.filter((o) => !liveIds.has(o.outcome))],
-      questions: meta?.questions ?? [],
+      questions: [...liveQ, ...cachedQ.filter((q) => !liveQIds.has(q.question))],
     };
   }, [meta]);
 

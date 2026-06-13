@@ -13,7 +13,7 @@ import {
   pendingToAction,
   type ValidatorL1VotePending,
 } from '@/lib/api';
-import { cacheOutcomes } from '@/lib/outcomeMetaCache';
+import { cacheOutcomes, cacheQuestions } from '@/lib/outcomeMetaCache';
 import {
   buildValidatorIndex,
   governanceForSignerAccount,
@@ -92,10 +92,13 @@ export function VoteStatus({ network, selfSigner, onPickAction }: VoteStatusProp
       setPending(votes);
       setIdx(buildValidatorIndex(summaries));
       setLoadedAt(Date.now());
-      // Continuously cache live outcome names (best-effort) so settle votes can
-      // still be name-resolved after HF drops the outcome from outcomeMeta.
+      // Continuously cache live outcome + question names (best-effort) so settle
+      // votes can still be name-resolved after HF drops them from outcomeMeta.
       fetchOutcomeMeta(network)
-        .then((m) => cacheOutcomes(m.outcomes ?? []))
+        .then((m) => {
+          cacheOutcomes(m.outcomes ?? []);
+          cacheQuestions(m.questions ?? []);
+        })
         .catch(() => {});
     } catch (e) {
       setErr((e as Error).message);

@@ -9,9 +9,10 @@
 // this browser saw while live are resolvable; anything never cached falls back
 // to "not found" in the decode (no DB; that's hl-markets' indexer job).
 
-import type { OutcomeInfo } from '@/lib/api';
+import type { OutcomeInfo, QuestionInfo } from '@/lib/api';
 
 const KEY = 'hlOutcomeMetaCache';
+const Q_KEY = 'hlQuestionMetaCache';
 
 type Cache = Record<string, OutcomeInfo>;
 
@@ -27,20 +28,24 @@ function safeStorage(): Storage | null {
   }
 }
 
-function read(): Cache {
+function readKey<T>(key: string): Record<string, T> {
   const s = safeStorage();
   if (!s) return {};
-  const raw = s.getItem(KEY);
+  const raw = s.getItem(key);
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Cache;
+      return parsed as Record<string, T>;
     }
   } catch {
     // fall through
   }
   return {};
+}
+
+function read(): Cache {
+  return readKey<OutcomeInfo>(KEY);
 }
 
 /** Merge live outcomes into the cache (latest wins). No-op without storage. */
@@ -55,4 +60,22 @@ export function cacheOutcomes(outcomes: OutcomeInfo[]): void {
 /** Every cached outcome — for merging into a decode lookup. */
 export function getCachedOutcomes(): OutcomeInfo[] {
   return Object.values(read());
+}
+
+// Questions are dropped from live outcomeMeta once a question enters settlement
+// — exactly when its `settleQuestion` vote is pending — so cache them too, the
+// same best-effort way as outcomes (resolvable only if seen while active).
+
+/** Merge live questions into the cache (latest wins). No-op without storage. */
+export function cacheQuestions(questions: QuestionInfo[]): void {
+  const s = safeStorage();
+  if (!s || questions.length === 0) return;
+  const c = readKey<QuestionInfo>(Q_KEY);
+  for (const q of questions) c[String(q.question)] = q;
+  s.setItem(Q_KEY, JSON.stringify(c));
+}
+
+/** Every cached question — for merging into a decode lookup. */
+export function getCachedQuestions(): QuestionInfo[] {
+  return Object.values(readKey<QuestionInfo>(Q_KEY));
 }
