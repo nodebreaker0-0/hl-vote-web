@@ -149,6 +149,57 @@ describe('decodeAction', () => {
     expect(byLabel['Fallback']).toBe('Fallback');
   });
 
+  it('settleQuestion: atomic multi-outcome settle → per-outcome rows + winner', () => {
+    const m: OutcomeMeta = {
+      outcomes: [
+        { outcome: 101, name: 'Below 4.3%', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDC' },
+        { outcome: 102, name: 'Exactly 4.3%', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDC' },
+        { outcome: 103, name: 'Above 4.3%', description: '', sideSpecs: [{ name: 'Yes' }, { name: 'No' }], quoteToken: 'USDC' },
+      ],
+      questions: [
+        { question: 19, name: 'May CPI YoY', description: '', namedOutcomes: [101, 102, 103], settledNamedOutcomes: [] },
+      ],
+    };
+    const d = decodeAction(
+      {
+        type: 'validatorL1Vote',
+        O: {
+          settleQuestion: {
+            question: 19,
+            settleFractionsAndDetails: [
+              [101, ['1', 'CPI was 4.2%, below 4.3%']],
+              [102, ['0', 'not exactly 4.3%']],
+              [103, ['0', 'not above 4.3%']],
+            ],
+          },
+        },
+      },
+      m,
+    );
+    expect(d.variant).toBe('Outcome settle (question)');
+    expect(d.title).toBe('May CPI YoY');
+    expect(d.warning).toBeUndefined();
+    const qs = d.questionSettle;
+    expect(qs).toBeDefined();
+    if (!qs) return;
+    expect(qs.rows).toHaveLength(3);
+    const win = qs.rows.filter((r) => r.winner);
+    expect(win).toHaveLength(1);
+    expect(win[0]?.name).toBe('Below 4.3%');
+    expect(qs.rows.find((r) => r.outcome === 102)?.fraction).toBe('0');
+    const byLabel = Object.fromEntries(d.lines.map((l) => [l.label, l.value]));
+    expect(byLabel['Winner']).toBe('Below 4.3%');
+  });
+
+  it('settleQuestion: unknown question id → warning, no crash', () => {
+    const d = decodeAction(
+      { type: 'validatorL1Vote', O: { settleQuestion: { question: 999, settleFractionsAndDetails: [[1, ['1', 'x']]] } } },
+      null,
+    );
+    expect(d.variant).toBe('Outcome settle (question)');
+    expect(d.warning).toMatch(/999/);
+  });
+
   it('delisting: D variant', () => {
     const d = decodeAction({ type: 'validatorL1Vote', D: 'BLAST' }, null);
     expect(d.variant).toBe('Delisting');

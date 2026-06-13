@@ -12,6 +12,7 @@ export type DecodedVariant =
   | 'Outcome deploy'
   | 'Outcome deploy (question)'
   | 'Outcome settle'
+  | 'Outcome settle (question)'
   | 'Unknown';
 
 export interface DecodeLine {
@@ -54,6 +55,25 @@ export interface DecodedAction {
   multiOutcome?: MultiOutcomeContext;
   /** I-8 — option list for a multi-option deploy (rendered scrollable). */
   options?: { name: string; description?: string }[];
+  /** settleQuestion — per-outcome settle of a whole question in one action. */
+  questionSettle?: QuestionSettleContext;
+}
+
+/** One outcome's settle inside a settleQuestion action. */
+export interface QuestionSettleRow {
+  outcome: number;
+  name: string;
+  /** settleFraction string ("1" = this side resolves Yes, "0" = No). */
+  fraction: string;
+  /** fraction > 0 → this outcome resolved (a/the winning side). */
+  winner: boolean;
+  details: string;
+}
+
+export interface QuestionSettleContext {
+  questionId: number;
+  questionName: string;
+  rows: QuestionSettleRow[];
 }
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -234,6 +254,55 @@ export function decodeAction(
       };
     }
 
+    // Settle question — { settleQuestion: { question, settleFractionsAndDetails:
+    //   [[outcomeId, [fraction, details]], ...] } } — atomically settles every
+    // named outcome of a multi-option question.
+    if (innerKey === 'settleQuestion') {
+      const qid = Number(v.question);
+      const q = meta?.questions?.find((qq) => qq.question === qid);
+      const entries = Array.isArray(v.settleFractionsAndDetails)
+        ? (v.settleFractionsAndDetails as unknown[])
+        : [];
+      const rows: QuestionSettleRow[] = entries.map((e) => {
+        const arr = Array.isArray(e) ? (e as unknown[]) : [];
+        const oid = Number(arr[0]);
+        const fd = Array.isArray(arr[1]) ? (arr[1] as unknown[]) : [];
+        const fraction = String(fd[0] ?? '');
+        const details = typeof fd[1] === 'string' ? fd[1] : String(fd[1] ?? '');
+        const x = Number(fraction);
+        return {
+          outcome: oid,
+          name: findOutcome(meta, oid)?.name ?? `#${oid} (not in meta)`,
+          fraction,
+          winner: Number.isFinite(x) && x > 0,
+          details,
+        };
+      });
+      const winners = rows.filter((r) => r.winner).map((r) => r.name);
+      return {
+        variant: 'Outcome settle (question)',
+        title: q ? q.name : `settle question #${qid}`,
+        lines: [
+          { label: 'Action', value: 'Settle question (multi-outcome, atomic)' },
+          {
+            label: 'Question',
+            value: q ? `#${qid} — ${q.name}` : `#${qid} — NOT FOUND in outcomeMeta`,
+            emphasis: true,
+          },
+          { label: 'Outcomes', value: `${rows.length} settled`, emphasis: true },
+          {
+            label: 'Winner',
+            value: winners.length ? winners.join(', ') : '(none / all No)',
+            emphasis: true,
+          },
+        ],
+        warning: q
+          ? undefined
+          : `Question #${qid} is not in outcomeMeta — verify the question and outcome ids manually.`,
+        questionSettle: { questionId: qid, questionName: q ? q.name : `#${qid}`, rows },
+      };
+    }
+
     // Unknown O variant — still signs, but flag it.
     return {
       variant: 'Unknown',
@@ -275,6 +344,14 @@ export function sanityChecklist(action: Record<string, unknown>): string[] {
         'Outcome id ↔ market name above is correct (cross-checked against outcomeMeta).',
         'settleFraction settles the intended side (first side = yes, second = no).',
         'The details text matches the real-world result (LLM-generated — verify it).',
+      ];
+    }
+    if (innerKey === 'settleQuestion') {
+      return [
+        UNIVERSAL_CHECK,
+        'Question id ↔ name above is correct (cross-checked against outcomeMeta).',
+        'Each outcome’s settleFraction is right — the winning option = 1, the rest = 0.',
+        'Every details text matches the real-world result (LLM-generated — verify each).',
       ];
     }
     if (innerKey === 'registerTokensAndStandaloneOutcome' || innerKey === 'registerTokensAndQuestion') {

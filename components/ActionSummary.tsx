@@ -113,6 +113,41 @@ export function ActionSummary({ action, network }: ActionSummaryProps) {
         </div>
       )}
 
+      {decoded.questionSettle && (
+        <div className="mt-3 rounded border border-hl-border bg-hl-bg p-2">
+          <div className="mb-1 text-[11px] text-hl-subtle">
+            Settle question <span className="text-hl-text">#{decoded.questionSettle.questionId}</span> —{' '}
+            {decoded.questionSettle.rows.length} outcomes (winning side = 1)
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            <table className="w-full text-[11px]">
+              <tbody>
+                {decoded.questionSettle.rows.map((r) => (
+                  <tr
+                    key={r.outcome}
+                    className={clsx('border-t border-hl-border/50 align-top', r.winner && 'bg-hl-mint/10')}
+                  >
+                    <td className="py-1 pr-2">
+                      {r.winner ? (
+                        <span className="rounded bg-hl-mint px-1 text-[9px] font-semibold uppercase text-hl-bg">
+                          yes {r.fraction}
+                        </span>
+                      ) : (
+                        <span className="text-hl-subtle">no {r.fraction}</span>
+                      )}
+                    </td>
+                    <td className="py-1 pr-2 text-hl-text">
+                      {r.name} <span className="mono text-hl-subtle">#{r.outcome}</span>
+                      {r.details && <span className="block text-hl-subtle">{r.details}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {decoded.multiOutcome && (
         <div className="mt-3 rounded border border-hl-border bg-hl-bg p-2">
           <div className="mb-1 text-[11px] text-hl-subtle">
